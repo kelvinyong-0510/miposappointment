@@ -1,0 +1,26 @@
+# Node dependencies
+node_modules/
+
+# Environment files — set VITE_API_URL in Cloudflare Pages dashboard
+frontend/.env
+frontend/.env.production
+frontend/.env.local
+
+# Build output
+frontend/dist/
+
+# SQLite database (contains real data — keep local only)
+backend/mipos.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/

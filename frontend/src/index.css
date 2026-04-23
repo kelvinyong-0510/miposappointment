@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mipos-orange: #FF6600;
+  --color-mipos-orange-dark: #E65C00;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  @apply bg-gray-50 text-gray-900;
+}
