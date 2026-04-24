@@ -29,7 +29,7 @@ export default function AdminDashboard() {
       `}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
-          <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-lg shadow-orange-500/30">
+          <div className="w-9 h-9 orange-gradient shadow-lg shadow-orange-500/30 rounded-xl flex items-center justify-center font-black text-white text-lg">
             M
           </div>
           <div>
@@ -66,7 +66,7 @@ export default function AdminDashboard() {
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-xs font-black text-white flex-shrink-0">
+            <div className="w-8 h-8 rounded-full orange-gradient flex items-center justify-center text-xs font-black text-white flex-shrink-0 shadow-sm">
               {(user.name || 'A')[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -100,7 +100,7 @@ export default function AdminDashboard() {
             <button className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
               <Bell className="w-5 h-5" />
             </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-xs font-black text-white">
+            <div className="w-8 h-8 rounded-full orange-gradient shadow-sm flex items-center justify-center text-xs font-black text-white">
               {(user.name || 'A')[0].toUpperCase()}
             </div>
           </div>
@@ -210,7 +210,7 @@ function DashboardHome() {
               .sort((a, b) => (a.time_slot || '').localeCompare(b.time_slot || ''))
               .map(lead => (
                 <div key={lead.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center font-black text-white text-sm flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full orange-gradient shadow-sm flex items-center justify-center font-black text-white text-sm flex-shrink-0">
                     {(lead.name || 'A')[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -232,22 +232,25 @@ function DashboardHome() {
       {/* Conversion Stats */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Conversion Rate</p>
-            <p className="text-3xl font-black text-gray-900">{stats.conversionRate ?? 0}%</p>
-            <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-2 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full transition-all" style={{ width: `${stats.conversionRate ?? 0}%` }} />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110" />
+            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Conversion Rate</p>
+            <p className="text-4xl font-black text-gray-900 relative z-10">{stats.conversionRate ?? 0}%</p>
+            <div className="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden relative z-10">
+              <div className="h-2 orange-gradient rounded-full transition-all" style={{ width: `${stats.conversionRate ?? 0}%` }} />
             </div>
           </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Revenue (Paid)</p>
-            <p className="text-3xl font-black text-green-600">RM {(stats.totalRevenue ?? 0).toLocaleString('en-MY', { minimumFractionDigits: 0 })}</p>
-            <p className="text-xs text-gray-400 mt-1">Pending: RM {(stats.pendingRevenue ?? 0).toLocaleString('en-MY')}</p>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110" />
+            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Revenue (Paid)</p>
+            <p className="text-4xl font-black text-green-500 relative z-10">RM {(stats.totalRevenue ?? 0).toLocaleString('en-MY', { minimumFractionDigits: 0 })}</p>
+            <p className="text-xs text-gray-400 mt-2 font-medium relative z-10">Pending: RM {(stats.pendingRevenue ?? 0).toLocaleString('en-MY')}</p>
           </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Lost Leads</p>
-            <p className="text-3xl font-black text-red-500">{stats.lost ?? 0}</p>
-            <p className="text-xs text-gray-400 mt-1">out of {stats.total ?? 0} total</p>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110" />
+            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Lost Leads</p>
+            <p className="text-4xl font-black text-red-500 relative z-10">{stats.lost ?? 0}</p>
+            <p className="text-xs text-gray-400 mt-2 font-medium relative z-10">out of {stats.total ?? 0} total leads</p>
           </div>
         </div>
       )}

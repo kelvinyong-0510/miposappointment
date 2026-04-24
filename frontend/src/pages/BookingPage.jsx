@@ -139,19 +139,22 @@ const ADDRESS = `29, Jalan 2, Taman Len Seng Cheras,\n56000 Kuala Lumpur,\nWilay
 // ── Component ────────────────────────────────────────────────────────────────
 // ── Shared layout wrapper ─────────────────────────────────────────────────
 const PageShell = ({ children }) => (
-  <div
-    className="min-h-screen flex flex-col relative"
-    style={{ backgroundImage: 'url(/mipos-bg-cafe.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}
-  >
-    <div className="absolute inset-0 bg-black/80" />
-    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/50" />
+  <div className="min-h-screen flex flex-col relative bg-[#f8fafc] overflow-hidden">
+    {/* Animated Modern Gradient Background */}
+    <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[120%] z-0 pointer-events-none opacity-40">
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-orange-200 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob" />
+      <div className="absolute bottom-0 left-10 w-[700px] h-[700px] bg-indigo-100 rounded-full mix-blend-multiply filter blur-[120px] opacity-70 animate-blob animation-delay-2000" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-orange-50 rounded-full mix-blend-multiply filter blur-[150px] opacity-70 animate-blob animation-delay-4000" />
+    </div>
 
     {/* Navbar - Simplified */}
-    <nav className="relative z-10 flex items-center justify-between px-6 py-4">
+    <nav className="relative z-10 flex items-center justify-between px-6 py-5">
       <div className="flex items-center gap-3">
-        <img src="/mipos-logo.png" alt="MIPOS" className="h-10 w-10 rounded-xl object-cover shadow-lg ring-2 ring-white/20" />
-        <div className="hidden sm:block text-white font-bold text-lg leading-none tracking-wide">
-          MIPOS <span className="text-orange-300 text-xs font-medium tracking-widest uppercase ml-1">ShopTech</span>
+        <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl shadow-lg shadow-orange-500/30">
+          <span className="text-white font-black text-xl">M</span>
+        </div>
+        <div className="hidden sm:block text-[#0f172a] font-black text-xl leading-none tracking-tight">
+          MIPOS <span className="text-orange-500 text-xs font-bold tracking-widest uppercase ml-1">ShopTech</span>
         </div>
       </div>
     </nav>
@@ -247,26 +250,26 @@ export default function BookingPage() {
         <div className="w-full max-w-5xl">
 
           {/* Hero Section */}
-          <div className="text-center mb-6 md:mb-10">
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
+          <div className="text-center mb-10 md:mb-14">
+            <h1 className="text-4xl md:text-5xl font-black text-[#0f172a] mb-4 tracking-tight">
               {t.hero.split('Walk-in').map((part, i) => (
                 <React.Fragment key={i}>
                   {part}
-                  {i === 0 && <span className="text-[#FF6600]">Walk-in</span>}
+                  {i === 0 && <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-orange-600">Walk-in</span>}
                 </React.Fragment>
               ))}
             </h1>
-            <p className="text-white/80 text-lg">{t.sub}</p>
+            <p className="text-[#475569] text-lg font-medium">{t.sub}</p>
           </div>
 
           <div className="flex flex-col lg:flex-row gap-8 items-start">
             
             {/* ── Appointment Form (MAIN FOCUS) ────────────────────────────── */}
-            <div className="flex-1 w-full bg-white/25 backdrop-blur-md rounded-[2rem] shadow-2xl overflow-hidden ring-1 ring-white/30">
+            <div className="flex-1 w-full glass-panel rounded-[2rem] overflow-hidden">
               
               {/* Top bar: no longer has language switcher here */}
-              <div className="bg-white/20 border-b border-white/20 px-6 py-3 flex items-center">
-                <span className="text-white/80 text-xs font-bold uppercase tracking-widest">Appointment Booking</span>
+              <div className="bg-white/50 border-b border-gray-100 px-6 py-4 flex items-center">
+                <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">Appointment Booking</span>
               </div>
 
               <div className="px-6 py-8 md:px-10">
@@ -277,21 +280,21 @@ export default function BookingPage() {
                 <form className="space-y-6" onSubmit={handleSubmit}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-xs font-bold text-white/70 uppercase tracking-widest mb-2 ml-1">{t.name}</label>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">{t.name}</label>
                       <div className="relative group">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
                         <input type="text" name="name" required value={formData.name} onChange={handleChange}
                           placeholder="John Doe"
-                          className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm transition-all text-white placeholder:text-white/40" />
+                          className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white transition-all text-gray-900 placeholder:text-gray-300 font-medium" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-white/70 uppercase tracking-widest mb-2 ml-1">{t.phone} *</label>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">{t.phone} *</label>
                       <div className="relative group">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
                         <input type="tel" name="phone" required value={formData.phone} onChange={handleChange}
                           placeholder="012-3456789"
-                          className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm transition-all text-white placeholder:text-white/40" />
+                          className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white transition-all text-gray-900 placeholder:text-gray-300 font-medium" />
                       </div>
                     </div>
                   </div>
@@ -299,65 +302,65 @@ export default function BookingPage() {
                   {/* Company Name + Language Switcher on the same row */}
                   <div>
                     <div className="flex items-center justify-between mb-2 ml-1">
-                      <label className="block text-xs font-bold text-white/70 uppercase tracking-widest">
-                        {t.company} <span className="text-white/40 font-normal lowercase">{t.companyOptional}</span>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">
+                        {t.company} <span className="text-gray-400 font-normal lowercase">{t.companyOptional}</span>
                       </label>
                       {/* ── Language Switcher (inline) ── */}
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-full border border-gray-200">
                         {Object.entries(LANGUAGES).map(([code, info]) => (
                           <button
                             key={code}
                             type="button"
                             onClick={() => setLang(code)}
-                            className={`flex items-center justify-center min-w-[70px] px-3 py-1 rounded-full text-[11px] font-bold transition-all border
+                            className={`flex items-center justify-center min-w-[70px] px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shadow-sm
                               ${lang === code 
-                                ? 'bg-[#FF6600] border-[#FF6600] text-white shadow-md shadow-orange-400/40' 
-                                : 'bg-white/15 border-white/30 text-white/70 hover:bg-white/25 hover:text-white'}`}
+                                ? 'bg-white text-orange-600 shadow-sm border border-gray-100' 
+                                : 'bg-transparent text-gray-500 hover:text-gray-900 border border-transparent'}`}
                           >
                             {info.label}
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div className="relative group">
-                      <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                    <div className="relative group mt-2">
+                      <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none group-focus-within:text-orange-500 transition-colors" />
                       <input type="text" name="company" value={formData.company} onChange={handleChange}
                         placeholder="Your Company Name"
-                        className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm transition-all text-white placeholder:text-white/40" />
+                        className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white transition-all text-gray-900 placeholder:text-gray-300 font-medium" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-xs font-bold text-white/70 uppercase tracking-widest mb-2 ml-1">{t.date}</label>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">{t.date}</label>
                       <div className="relative group">
-                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none group-focus-within:text-orange-500 transition-colors" />
                         <input type="date" name="date" required value={formData.date} onChange={handleChange}
                           min={new Date().toISOString().split('T')[0]}
-                          className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm transition-all text-white [color-scheme:dark]" />
+                          className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white transition-all text-gray-900 font-medium" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-white/70 uppercase tracking-widest mb-2 ml-1">{t.timeSlot}</label>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">{t.timeSlot}</label>
                       <div className="relative group">
-                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none group-focus-within:text-orange-500 transition-colors" />
                         <select name="time_slot" required value={formData.time_slot} onChange={handleChange}
-                          className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm appearance-none transition-all text-white [color-scheme:dark]">
-                          <option value="" className="bg-gray-800">{t.selectTime}</option>
-                          {TIME_SLOTS.map(slot => <option key={slot} value={slot} className="bg-gray-800">{slot}</option>)}
+                          className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white appearance-none transition-all text-gray-900 font-medium cursor-pointer">
+                          <option value="" className="text-gray-400">{t.selectTime}</option>
+                          {TIME_SLOTS.map(slot => <option key={slot} value={slot} className="text-gray-900">{slot}</option>)}
                         </select>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-white/70 uppercase tracking-widest mb-2 ml-1">{t.purpose}</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 ml-1">{t.purpose}</label>
                     <div className="relative group">
-                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none group-focus-within:text-[#FF6600] transition-colors" />
+                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none group-focus-within:text-orange-500 transition-colors" />
                       <select name="purpose" required value={formData.purpose} onChange={handleChange}
-                        className="w-full pl-11 pr-4 py-3.5 border border-white/30 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/30 focus:border-[#FF6600] outline-none bg-white/20 backdrop-blur-sm appearance-none transition-all text-white [color-scheme:dark]">
-                        <option value="" className="bg-gray-800">{t.selectPurpose}</option>
-                        {t.purposes.map(p => <option key={p} value={p} className="bg-gray-800">{p}</option>)}
+                        className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-2xl text-sm focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none bg-white appearance-none transition-all text-gray-900 font-medium cursor-pointer">
+                        <option value="" className="text-gray-400">{t.selectPurpose}</option>
+                        {t.purposes.map(p => <option key={p} value={p} className="text-gray-900">{p}</option>)}
                       </select>
                     </div>
                   </div>
@@ -373,17 +376,16 @@ export default function BookingPage() {
             {/* ── Showroom Center Panel ─────────────────────────────────── */}
             <div className="lg:w-[320px] flex flex-col gap-5">
               
-              {/* Info Detail Card - 75% transparent glassmorphism */}
-              <div className="bg-white/25 backdrop-blur-md rounded-[2rem] shadow-xl overflow-hidden ring-1 ring-white/30 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-orange-400/30 rounded-lg flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-orange-300" />
+              {/* Info Detail Card */}
+              <div className="glass-panel rounded-[2rem] p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-orange-500" />
                   </div>
-                  <h3 className="text-sm font-black text-white uppercase tracking-tight">{t.addressTitle}</h3>
+                  <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest">{t.addressTitle}</h3>
                 </div>
 
-                {/* Google Maps Embed - address-based query for reliable pin */}
-                <div className="w-full h-36 rounded-2xl overflow-hidden mb-4 ring-1 ring-white/20">
+                <div className="w-full h-40 rounded-2xl overflow-hidden mb-5 border border-gray-100 shadow-inner">
                   <iframe 
                     title="Mipos ShopTech Centre Map"
                     width="100%" 
@@ -396,45 +398,47 @@ export default function BookingPage() {
                   />
                 </div>
 
-                <p className="text-xs text-white/80 leading-relaxed font-semibold mb-5 whitespace-pre-line">
+                <p className="text-sm text-gray-500 leading-relaxed font-medium mb-6 whitespace-pre-line">
                   {ADDRESS}
                 </p>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <button onClick={handleCopy}
-                    className={`flex items-center gap-1.5 justify-center py-2.5 rounded-xl text-[11px] font-black transition-all border
-                      ${copied ? 'bg-green-500/30 border-green-400/40 text-green-200' : 'bg-white/15 border-white/30 text-white/80 hover:bg-white/25'}`}>
-                    {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    className={`flex items-center gap-1.5 justify-center py-3 rounded-xl text-xs font-bold transition-all border shadow-sm
+                      ${copied ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? t.copied : t.copyAddress}
                   </button>
                   <a href="https://www.google.com/maps/search/?api=1&query=Mipos+Shoptech+Centre+29+Jalan+2+Taman+Len+Seng+Cheras+56000+Kuala+Lumpur" target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 justify-center py-2.5 bg-[#FF6600]/80 hover:bg-[#FF6600] text-white rounded-xl text-[11px] font-black transition-all">
-                    <Navigation className="w-3 h-3" />
+                    className="flex items-center gap-1.5 justify-center py-3 orange-gradient text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 transition-all">
+                    <Navigation className="w-3.5 h-3.5" />
                     {t.openMaps}
                   </a>
                 </div>
               </div>
 
-              {/* Hours Card - 75% transparent glassmorphism */}
-              <div className="bg-white/25 backdrop-blur-md rounded-[2.2rem] shadow-xl p-6 ring-1 ring-white/30">
-                <div className="flex items-center gap-2 mb-4 text-white">
-                  <Clock className="w-4 h-4 text-orange-300" />
-                  <h3 className="text-sm font-black uppercase tracking-tight">{t.hoursTitle}</h3>
+              {/* Hours Card */}
+              <div className="glass-panel rounded-[2rem] p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-indigo-500" />
+                  </div>
+                  <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest">{t.hoursTitle}</h3>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-white/60 font-bold">{t.monFri}</span>
-                    <span className="text-white font-black">9:30 AM – 4:30 PM</span>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-[13px]">
+                    <span className="text-gray-500 font-semibold">{t.monFri}</span>
+                    <span className="text-gray-900 font-bold">9:30 AM – 4:30 PM</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-white/60 font-bold">{t.sat}</span>
-                    <span className="text-white font-black">10:00 AM – 12:30 PM</span>
+                  <div className="flex justify-between items-center text-[13px]">
+                    <span className="text-gray-500 font-semibold">{t.sat}</span>
+                    <span className="text-gray-900 font-bold">10:00 AM – 12:30 PM</span>
                   </div>
-                  <div className="w-full h-px bg-white/10 my-1" />
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-white/60 font-bold">{t.sun}</span>
-                    <span className="text-red-400 font-black flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400" /> {t.closed}
+                  <div className="w-full h-px bg-gray-100 my-2" />
+                  <div className="flex justify-between items-center text-[13px]">
+                    <span className="text-gray-500 font-semibold">{t.sun}</span>
+                    <span className="text-rose-500 font-bold flex items-center gap-1.5 bg-rose-50 px-2 py-1 rounded-md">
+                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /> {t.closed}
                     </span>
                   </div>
                 </div>

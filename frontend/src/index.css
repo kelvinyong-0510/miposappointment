@@ -1,11 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-mipos-orange: #FF6600;
-  --color-mipos-orange-dark: #E65C00;
+  --color-mipos-orange: #f97316;
+  --color-mipos-orange-dark: #ea580c;
+  --color-mipos-navy: #0f172a;
+  
+  --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-inter: 'Inter', system-ui, sans-serif;
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  @apply bg-gray-50 text-gray-900;
+  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.orange-gradient {
+  background: linear-gradient(135deg, var(--color-mipos-orange) 0%, var(--color-mipos-orange-dark) 100%);
 }
