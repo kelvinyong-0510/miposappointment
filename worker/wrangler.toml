@@ -1,0 +1,9 @@
+name = "mipos-api"
+main = "src/index.js"
+compatibility_date = "2025-04-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mipos-db"
+database_id = "18c7f391-10cd-42b2-a786-702154ddc28d"
