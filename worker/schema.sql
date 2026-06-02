@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS leads (
     quotation_no      TEXT,
     invoice_no        TEXT,
     notes             TEXT,
+    google_event_id   TEXT,
     created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

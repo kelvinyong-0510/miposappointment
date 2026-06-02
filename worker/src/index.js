@@ -26,6 +26,120 @@ async function sha256(str) {
     .join('');
 }
 
+// ─── Slot capacity ──────────────────────────────────────────────────────────
+// A slot is "taken" while an appointment is active. Cancelled appointments
+// (stage 'Closed Lost' / 'Lost') free the slot again.
+const DEAD_STAGES = "('Closed Lost','Lost')";
+
+// ─── Google Calendar (service account) ────────────────────────────────────────
+// Set via `wrangler secret put`: GCAL_CLIENT_EMAIL, GCAL_PRIVATE_KEY, GCAL_CALENDAR_ID.
+// When any is missing, calendar sync is silently skipped (booking still works).
+function gcalEnabled(env) {
+  return !!(env.GCAL_CLIENT_EMAIL && env.GCAL_PRIVATE_KEY && env.GCAL_CALENDAR_ID);
+}
+
+function b64url(input) {
+  const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : new Uint8Array(input);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function pemToPkcs8(pem) {
+  const b64 = pem.replace(/\\n/g, '\n')
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+
+async function gcalAccessToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = b64url(JSON.stringify({
+    iss: env.GCAL_CLIENT_EMAIL,
+    scope: 'https://www.googleapis.com/auth/calendar.events',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  }));
+  const signingInput = `${header}.${claim}`;
+  const key = await crypto.subtle.importKey(
+    'pkcs8', pemToPkcs8(env.GCAL_PRIVATE_KEY),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signingInput));
+  const jwt = `${signingInput}.${b64url(sig)}`;
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${jwt}`,
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Google token error: ' + JSON.stringify(data));
+  return data.access_token;
+}
+
+// "10:00 AM" / "2:30 PM" on a YYYY-MM-DD date → RFC3339 start/end (+30 min), MYT (+08:00)
+function slotToTimes(date, slot) {
+  const m = String(slot || '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!date || !m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = m[3].toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  const pad = n => String(n).padStart(2, '0');
+  let eh = h, em = min + 30;
+  if (em >= 60) { em -= 60; eh += 1; }
+  return {
+    start: `${date}T${pad(h)}:${pad(min)}:00+08:00`,
+    end:   `${date}T${pad(eh)}:${pad(em)}:00+08:00`,
+  };
+}
+
+async function gcalCreateEvent(env, lead) {
+  const times = slotToTimes(lead.date, lead.time_slot);
+  if (!times) return null;
+  const token = await gcalAccessToken(env);
+  const calId = encodeURIComponent(env.GCAL_CALENDAR_ID);
+  const event = {
+    summary: `MIPOS Walk-In: ${lead.name || 'Customer'}${lead.purpose ? ' — ' + lead.purpose : ''}`,
+    description: [
+      `Name: ${lead.name || '-'}`,
+      `Phone: ${lead.phone || '-'}`,
+      `Company: ${lead.company || '-'}`,
+      `Purpose: ${lead.purpose || '-'}`,
+      '',
+      'Booked via appointment.mipos.me',
+    ].join('\n'),
+    location: '29, Jalan 2, Taman Len Seng Cheras, 56000 Kuala Lumpur',
+    start: { dateTime: times.start, timeZone: 'Asia/Kuala_Lumpur' },
+    end:   { dateTime: times.end,   timeZone: 'Asia/Kuala_Lumpur' },
+  };
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(event),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Google event error: ' + JSON.stringify(data));
+  return data.id;
+}
+
+async function gcalDeleteEvent(env, eventId) {
+  if (!eventId) return;
+  const token = await gcalAccessToken(env);
+  const calId = encodeURIComponent(env.GCAL_CALENDAR_ID);
+  await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 // ─── Stage helpers ────────────────────────────────────────────────────────────
 
 const STAGE_HEX = {
@@ -290,6 +404,19 @@ export default {
         }
       }
 
+      // ── Availability ──────────────────────────────────────────────────────
+      // Which slots are already booked for a date (active appointments only).
+      if (path === '/api/availability' && method === 'GET') {
+        const date = url.searchParams.get('date');
+        if (!date) return json({ error: 'date query param required' }, 400);
+        const { results } = await env.DB.prepare(
+          `SELECT DISTINCT time_slot FROM leads
+           WHERE date=? AND time_slot IS NOT NULL AND time_slot!=''
+             AND stage NOT IN ${DEAD_STAGES}`
+        ).bind(date).all();
+        return json({ date, booked: results.map(r => r.time_slot) });
+      }
+
       // ── Leads ─────────────────────────────────────────────────────────────
       const SEL = `SELECT leads.*,staff.name as assigned_staff_name
                    FROM leads LEFT JOIN staff ON leads.assigned_staff=staff.id`;
@@ -312,12 +439,48 @@ export default {
           return json(results);
         }
         if (method === 'POST') {
-          const { name, phone, company, date, time_slot, purpose } = await request.json();
-          if (!phone) return json({ error: 'Phone number is required' }, 400);
-          const r = await env.DB.prepare(
-            'INSERT INTO leads(name,phone,company,date,time_slot,purpose) VALUES(?,?,?,?,?,?)'
-          ).bind(name, phone, company, date, time_slot, purpose).run();
-          return json({ id: r.meta.last_row_id, success: true }, 201);
+          const body = await request.json();
+          if (!body.phone) return json({ error: 'Phone number is required' }, 400);
+          // Coerce missing optionals to null — D1 .bind() rejects undefined.
+          const name      = body.name      ?? null;
+          const phone     = body.phone     ?? null;
+          const company   = body.company   ?? null;
+          const date      = body.date      ?? null;
+          const time_slot = body.time_slot ?? null;
+          const purpose   = body.purpose   ?? null;
+
+          let newId;
+          if (date && time_slot) {
+            // Atomic 1-booking-per-slot guard: insert only if no active lead
+            // already holds this date+slot. changes===0 ⇒ slot just taken.
+            const r = await env.DB.prepare(
+              `INSERT INTO leads(name,phone,company,date,time_slot,purpose)
+               SELECT ?,?,?,?,?,?
+               WHERE NOT EXISTS (
+                 SELECT 1 FROM leads
+                 WHERE date=? AND time_slot=? AND stage NOT IN ${DEAD_STAGES}
+               )`
+            ).bind(name, phone, company, date, time_slot, purpose, date, time_slot).run();
+            if (!r.meta.changes) {
+              return json({ error: 'slot_taken', message: 'That time slot has just been booked. Please pick another.' }, 409);
+            }
+            newId = r.meta.last_row_id;
+          } else {
+            const r = await env.DB.prepare(
+              'INSERT INTO leads(name,phone,company,date,time_slot,purpose) VALUES(?,?,?,?,?,?)'
+            ).bind(name, phone, company, date, time_slot, purpose).run();
+            newId = r.meta.last_row_id;
+          }
+
+          // Mirror to Google Calendar (best-effort — never fails the booking).
+          if (gcalEnabled(env)) {
+            try {
+              const eid = await gcalCreateEvent(env, { name, phone, company, date, time_slot, purpose });
+              if (eid) await env.DB.prepare('UPDATE leads SET google_event_id=? WHERE id=?').bind(eid, newId).run();
+            } catch (e) { console.error('[GCal create]', e.message); }
+          }
+
+          return json({ id: newId, success: true }, 201);
         }
       }
 
@@ -340,10 +503,28 @@ export default {
           if (!sets.length) return json({ success: true, changes: 0 });
           vals.push(leadId);
           const r = await env.DB.prepare(`UPDATE leads SET ${sets.join(',')} WHERE id=?`).bind(...vals).run();
+
+          // Cancelled (stage → Lost / Closed Lost): remove its calendar event so
+          // the slot is freed both in the DB and on the synced calendar.
+          if (gcalEnabled(env) && ['Closed Lost', 'Lost'].includes(body.stage)) {
+            try {
+              const row = await env.DB.prepare('SELECT google_event_id FROM leads WHERE id=?').bind(leadId).first();
+              if (row?.google_event_id) {
+                await gcalDeleteEvent(env, row.google_event_id);
+                await env.DB.prepare('UPDATE leads SET google_event_id=NULL WHERE id=?').bind(leadId).run();
+              }
+            } catch (e) { console.error('[GCal delete]', e.message); }
+          }
           return r.meta.changes ? json({ success: true }) : json({ error: 'Lead not found' }, 404);
         }
         if (method === 'DELETE') {
+          let eid = null;
+          if (gcalEnabled(env)) {
+            const row = await env.DB.prepare('SELECT google_event_id FROM leads WHERE id=?').bind(leadId).first();
+            eid = row?.google_event_id || null;
+          }
           const r = await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(leadId).run();
+          if (eid) { try { await gcalDeleteEvent(env, eid); } catch (e) { console.error('[GCal delete]', e.message); } }
           return r.meta.changes ? json({ success: true }) : json({ error: 'Lead not found' }, 404);
         }
       }

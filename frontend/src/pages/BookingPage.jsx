@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Calendar, Clock, User, Phone, Briefcase, Tag,
@@ -19,6 +19,7 @@ const LANG = {
     date: 'Preferred Date', time: 'Time Slot',
     purpose: 'Purpose of Visit',
     selTime: 'Select a time slot', selPurpose: 'Select purpose',
+    booked: 'Booked', slotTaken: 'Sorry, that time slot was just booked. Please choose another.',
     submit: 'Confirm Appointment', submitting: 'Booking…',
     successTitle: 'Appointment Confirmed!',
     successSub: 'We look forward to seeing you on',
@@ -41,6 +42,7 @@ const LANG = {
     date: 'Tarikh', time: 'Slot Masa',
     purpose: 'Tujuan Kunjungan',
     selTime: 'Pilih slot masa', selPurpose: 'Pilih tujuan',
+    booked: 'Penuh', slotTaken: 'Maaf, slot masa itu baru ditempah. Sila pilih slot lain.',
     submit: 'Sahkan Temujanji', submitting: 'Mengesahkan…',
     successTitle: 'Temujanji Disahkan!',
     successSub: 'Kami berharap bertemu anda pada',
@@ -63,6 +65,7 @@ const LANG = {
     date: '日期', time: '时间段',
     purpose: '来访目的',
     selTime: '选择时间', selPurpose: '选择目的',
+    booked: '已约满', slotTaken: '抱歉，该时间段刚被预约。请选择其他时间。',
     submit: '确认预约', submitting: '处理中…',
     successTitle: '预约确认！',
     successSub: '期待在',
@@ -106,9 +109,28 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState('');
   const [copied, setCopied] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const t = LANG[lang];
 
   const set = e => setForm({ ...form, [e.target.name]: e.target.value });
+
+  // Fetch which slots are already booked whenever the date changes, and clear
+  // the chosen slot if it just became unavailable.
+  const loadAvailability = async date => {
+    if (!date) { setBookedSlots([]); return []; }
+    try {
+      const res = await axios.get(`${API_URL}/availability`, { params: { date } });
+      const booked = res.data?.booked || [];
+      setBookedSlots(booked);
+      setForm(f => (booked.includes(f.time_slot) ? { ...f, time_slot: '' } : f));
+      return booked;
+    } catch {
+      setBookedSlots([]);
+      return [];
+    }
+  };
+
+  useEffect(() => { loadAvailability(form.date); /* eslint-disable-next-line */ }, [form.date]);
 
   const submit = async e => {
     e.preventDefault();
@@ -116,8 +138,14 @@ export default function BookingPage() {
     try {
       await axios.post(`${API_URL}/leads`, form);
       setDone(true);
-    } catch { setError('Failed to submit. Please try again.'); }
-    finally { setLoading(false); }
+    } catch (err) {
+      if (err?.response?.status === 409) {
+        setError(t.slotTaken);
+        loadAvailability(form.date); // refresh so the taken slot shows as booked
+      } else {
+        setError('Failed to submit. Please try again.');
+      }
+    } finally { setLoading(false); }
   };
 
   const reset = () => {
@@ -246,7 +274,10 @@ export default function BookingPage() {
                   <Field label={t.time} icon={Clock}>
                     <select className="field-input" name="time_slot" required value={form.time_slot} onChange={set} style={{ appearance: 'none', cursor: 'pointer', paddingRight: 32 }}>
                       <option value="">{t.selTime}</option>
-                      {SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                      {SLOTS.map(s => {
+                        const taken = bookedSlots.includes(s);
+                        return <option key={s} value={s} disabled={taken}>{taken ? `${s} — ${t.booked}` : s}</option>;
+                      })}
                     </select>
                     <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#a0aec0', pointerEvents: 'none' }} />
                   </Field>
