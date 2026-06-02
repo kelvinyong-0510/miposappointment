@@ -11,6 +11,8 @@ frontend/dist/
 
 # SQLite database (contains real data — keep local only)
 backend/mipos.db
+backend/mipos.db-shm
+backend/mipos.db-wal
 
 # Logs
 *.log

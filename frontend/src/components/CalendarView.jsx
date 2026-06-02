@@ -1,451 +1,486 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
-import {
-  ChevronLeft, ChevronRight, X, Edit2, Save, Calendar,
-  Clock, User, Phone, Briefcase, Tag, DollarSign, Plus
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, MessageCircle, Edit2, Plus } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
-const STAGES = [
-  "Contacted", "Quotation sent", "Invoice sent", "Lost", "Cancel"
-];
-
-const STAGE_COLORS = {
-  "Contacted":      { bg: 'bg-blue-500/20',   text: 'text-blue-300',   dot: 'bg-blue-500'   },
-  "Quotation sent": { bg: 'bg-yellow-500/20', text: 'text-yellow-300', dot: 'bg-yellow-400' },
-  "Invoice sent":   { bg: 'bg-green-500/20',  text: 'text-green-300',  dot: 'bg-green-400'  },
-  "Lost":           { bg: 'bg-red-500/20',    text: 'text-red-300',    dot: 'bg-red-500'    },
-  "Cancel":         { bg: 'bg-slate-500/20',  text: 'text-slate-300',  dot: 'bg-slate-500'  },
+/* ── Purpose → colour mapping (matches second pic options) ── */
+const PURPOSE_COLORS = {
+  'POS System':              { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6',  bar: '#3b82f6'  },
+  'Hardware Devices (Sunmi)':{ bg: '#f5f3ff', text: '#6d28d9', dot: '#8b5cf6',  bar: '#8b5cf6'  },
+  'Technical Support':       { bg: '#fff7ed', text: '#c2410c', dot: '#f97316',  bar: '#f97316'  },
+  'LED Board':               { bg: '#fefce8', text: '#a16207', dot: '#eab308',  bar: '#eab308'  },
+  'Pager System':            { bg: '#fdf4ff', text: '#7c3aed', dot: '#a855f7',  bar: '#a855f7'  },
+  'Queue System':            { bg: '#ecfeff', text: '#0e7490', dot: '#06b6d4',  bar: '#06b6d4'  },
+  'Calling System':          { bg: '#f0fdfa', text: '#0f766e', dot: '#14b8a6',  bar: '#14b8a6'  },
+  'Others':                  { bg: '#f9fafb', text: '#6b7280', dot: '#9ca3af',  bar: '#9ca3af'  },
 };
 
-function toDateStr(date) {
-  return date.toISOString().slice(0, 10);
+const PURPOSE_LIST = Object.keys(PURPOSE_COLORS);
+
+/* Fallback colour for unknown purposes */
+function getPurposeColor(purpose) {
+  if (!purpose) return PURPOSE_COLORS['Others'];
+  return PURPOSE_COLORS[purpose] || PURPOSE_COLORS['Others'];
 }
 
-function parseLocalDate(str) {
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+const DAY_HEADERS = ['SU','MO','TU','WE','TH','FR','SA'];
+
+function toDateStr(d) { return d.toISOString().slice(0, 10); }
+function parseLocal(str) {
   const [y, m, d] = str.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-export default function CalendarView() {
-  const [leads, setLeads]         = useState([]);
-  const [staffList, setStaffList] = useState([]);
-  const [today]                   = useState(new Date());
-  const [viewDate, setViewDate]   = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [editingId, setEditingId]     = useState(null);
-  const [editForm, setEditForm]       = useState({});
-  const [showSalesModal, setShowSalesModal] = useState(false);
-  const [salesForm, setSalesForm]           = useState({});
-  const [showAddModal, setShowAddModal]     = useState(false);
-  const [addForm, setAddForm]               = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: '' });
+function fmtWA(p) {
+  if (!p) return '';
+  const d = p.replace(/\D/g, '');
+  if (d.startsWith('0')) return '6' + d;
+  if (!d.startsWith('60') && d.length > 8) return '60' + d;
+  return d;
+}
 
-  const fetchData = useCallback(async () => {
-    const [leadsRes, staffRes] = await Promise.all([
-      axios.get(`${API_URL}/leads`),
-      axios.get(`${API_URL}/staff`),
-    ]);
-    setLeads(leadsRes.data);
-    setStaffList(staffRes.data);
+const STAGE_OPTIONS = ['New Lead','Appointment Confirmed','Walk-In Arrived','Contacted',
+                       'Demo Done','Quotation sent','Invoice sent','Closed Won','Closed Lost','Lost'];
+
+export default function CalendarView() {
+  const [leads,       setLeads]       = useState([]);
+  const [today]                       = useState(new Date());
+  const [viewDate,    setViewDate]    = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  /* Add modal */
+  const [showAdd,  setShowAdd]  = useState(false);
+  const [addForm,  setAddForm]  = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: 'POS System', stage: 'New Lead', status: '' });
+  const [addSaving, setAddSaving] = useState(false);
+
+  /* Edit modal */
+  const [editLead, setEditLead] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+
+  const fetchLeads = useCallback(() => {
+    fetch(`${API_URL}/leads`)
+      .then(r => r.json())
+      .then(d => setLeads(Array.isArray(d) ? d : []))
+      .catch(() => setLeads([]));
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  // ── Calendar helpers ──────────────────────────────────────────────────────
+  /* ── Calendar maths ── */
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
-  const firstOfMonth = new Date(year, month, 1);
-  const daysInMonth  = new Date(year, month + 1, 0).getDate();
-  const startDay     = firstOfMonth.getDay(); // 0=Sun
+  const firstOfMonth  = new Date(year, month, 1);
+  const daysInMonth   = new Date(year, month + 1, 0).getDate();
+  /* Sunday-first */
+  const startOffset   = firstOfMonth.getDay();
 
-  const leadsByDate = leads.reduce((acc, lead) => {
-    if (!lead.date) return acc;
-    const key = lead.date.slice(0, 10);
+  const leadsByDate = leads.reduce((acc, l) => {
+    if (!l.date) return acc;
+    const key = l.date.slice(0, 10);
     if (!acc[key]) acc[key] = [];
-    acc[key].push(lead);
+    acc[key].push(l);
     return acc;
   }, {});
 
-  const todayStr = toDateStr(today);
+  const todayStr   = toDateStr(today);
+  const prevMonth  = () => setViewDate(new Date(year, month - 1, 1));
+  const nextMonth  = () => setViewDate(new Date(year, month + 1, 1));
+  const goToday    = () => { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(todayStr); };
 
-  const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
+  const dayLeads = selectedDay ? (leadsByDate[selectedDay] || []).slice().sort((a,b) => (a.time_slot||'').localeCompare(b.time_slot||'')) : [];
 
-  const dayLeads = selectedDay ? (leadsByDate[selectedDay] || []) : [];
-
-  // ── Inline edit ───────────────────────────────────────────────────────────
-  const handleEditClick = (lead) => {
-    setEditingId(lead.id);
-    setEditForm({
-      stage: lead.stage,
-      status: lead.status,
-      assigned_staff: lead.assigned_staff || '',
-      products_interest: lead.products_interest || ''
-    });
-  };
-
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({ ...prev, [name]: value }));
-    if (name === 'stage' && value === 'Closed Won') {
-      setSalesForm({ appointment_id: editingId, invoice_no: '', quotation_no: '', amount: '', items: '', payment_status: 'Paid' });
-      setShowSalesModal(true);
-    }
-  };
-
-  const handleSave = async (id) => {
-    await axios.put(`${API_URL}/leads/${id}`, editForm);
-    setEditingId(null);
-    fetchData();
-  };
-
-  const handleSalesSubmit = async (e) => {
+  /* ── Add appointment ── */
+  const submitAdd = async (e) => {
     e.preventDefault();
-    await axios.post(`${API_URL}/sales`, salesForm);
-    setShowSalesModal(false);
-    handleSave(editingId);
+    setAddSaving(true);
+    try {
+      await fetch(`${API_URL}/leads`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addForm),
+      });
+      setShowAdd(false);
+      setAddForm({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: 'POS System', stage: 'New Lead', status: '' });
+      fetchLeads();
+    } catch(e){ console.error(e); }
+    finally { setAddSaving(false); }
   };
 
-  const handleAddSubmit = async (e) => {
-    e.preventDefault();
-    await axios.post(`${API_URL}/leads`, addForm);
-    setShowAddModal(false);
-    setAddForm({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: '' });
-    fetchData();
+  /* ── Edit appointment ── */
+  const openEdit = (lead) => {
+    setEditLead(lead);
+    setEditForm({ name: lead.name||'', phone: lead.phone||'', company: lead.company||'', purpose: lead.purpose||'', stage: lead.stage||'New Lead', status: lead.status||'', date: lead.date||'', time_slot: lead.time_slot||'', notes: lead.notes||'' });
+  };
+  const submitEdit = async () => {
+    if (!editLead) return;
+    setEditSaving(true);
+    try {
+      await fetch(`${API_URL}/leads/${editLead.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      setEditLead(null);
+      fetchLeads();
+    } catch(e){ console.error(e); }
+    finally { setEditSaving(false); }
   };
 
+  /* ── Styles ── */
+  const inp = (extra={}) => ({
+    width:'100%', boxSizing:'border-box', border:'1px solid #e5e7eb',
+    borderRadius:8, padding:'8px 12px', fontSize:'.85rem', color:'#111827',
+    fontFamily:'inherit', outline:'none', background:'#f8fafc', ...extra,
+  });
+  const sel = (extra={}) => ({ ...inp(extra), cursor:'pointer' });
+  const FL  = ({ children }) => (
+    <label style={{ display:'block', fontSize:'.72rem', fontWeight:700, color:'#374151', marginBottom:4, letterSpacing:'.03em', textTransform:'uppercase' }}>{children}</label>
+  );
+
+  /* cells: null for empty prefix, number for day */
   const cells = [];
-  for (let i = 0; i < startDay; i++) cells.push(null);
+  for (let i = 0; i < startOffset; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  /* pad to full rows */
+  while (cells.length % 7 !== 0) cells.push(null);
 
-  const MONTH_NAMES = ['January','February','March','April','May','June',
-                       'July','August','September','October','November','December'];
-  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
+  /* ── RENDER ── */
   return (
-    <div className="flex flex-col lg:flex-row gap-6">
+    <div style={{ display:'flex', height:'calc(100vh - 56px)', overflow:'hidden', background:'#f4f6f8' }}>
 
-      <div className="flex-1 bg-[#151C2C] rounded-2xl shadow-sm border border-slate-800 overflow-hidden">
+      {/* ══════════════════════════════════════════
+          CALENDAR GRID COLUMN
+      ══════════════════════════════════════════ */}
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', padding:'14px 16px', gap:12 }}>
 
-        <div className="flex items-center justify-between px-6 py-4 bg-[#0B0F19] border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={prevMonth}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
+        {/* Top bar */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          {/* Left: nav */}
+          <div style={{ display:'flex', alignItems:'center', gap:16, paddingLeft: 8 }}>
+            <button onClick={prevMonth} style={{ border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }}>
+              <ChevronLeft size={22} />
             </button>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-[#FF6600]" />
-              <h2 className="text-lg font-bold text-white tracking-wide">
-                {MONTH_NAMES[month]} {year}
-              </h2>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <select value={month} onChange={e => setViewDate(new Date(year, parseInt(e.target.value), 1))} style={{ fontSize:'1.2rem', fontWeight:800, border:'none', background:'transparent', outline:'none', cursor:'pointer', color:'#111827', appearance:'none', paddingRight:18, backgroundImage:`url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat:'no-repeat', backgroundPosition:'right center' }}>
+                {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+              </select>
+              <select value={year} onChange={e => setViewDate(new Date(parseInt(e.target.value), month, 1))} style={{ fontSize:'1.2rem', fontWeight:800, border:'none', background:'transparent', outline:'none', cursor:'pointer', color:'#111827', appearance:'none', paddingRight:18, backgroundImage:`url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat:'no-repeat', backgroundPosition:'right center' }}>
+                {[2024,2025,2026,2027,2028,2029].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
             </div>
-            <button
-              onClick={nextMonth}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
-            >
-              <ChevronRight className="w-5 h-5" />
+            <button onClick={nextMonth} style={{ border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }}>
+              <ChevronRight size={22} />
             </button>
           </div>
-          <button onClick={() => setShowAddModal(true)} className="bg-[#FF6600] text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-[#E65C00] transition-colors shadow-sm">
-            <Plus className="w-4 h-4" /> Add Appointment
-          </button>
+
+          {/* Right: Today + Add */}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <button onClick={goToday} style={{ padding:'6px 16px', borderRadius:8, border:'none', background:'#111827', color:'#fff', fontWeight:700, fontSize:'.8rem', cursor:'pointer' }}>Today</button>
+            <button onClick={() => setShowAdd(true)} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:700, fontSize:'.8rem', cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+              <Plus size={12} /> Add
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-7 bg-[#1E293B]/50 border-b border-slate-800">
-          {DAY_NAMES.map(d => (
-            <div key={d} className="py-2 text-center text-xs font-semibold text-slate-400 uppercase tracking-widest">
-              {d}
-            </div>
-          ))}
-        </div>
+        {/* Calendar card */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,.06)' }}>
 
-        <div className="grid grid-cols-7">
-          {cells.map((day, idx) => {
-            if (!day) return <div key={`empty-${idx}`} className="min-h-[90px] border-b border-r border-slate-800/50 bg-[#0B0F19]/30" />;
+          {/* Day-of-week headers */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', borderBottom:'1px solid #e2e8f0', flexShrink:0 }}>
+            {DAY_HEADERS.map(h => (
+              <div key={h} style={{ padding:'9px 0', textAlign:'center', fontSize:'.68rem', fontWeight:800, color:'#ff6500', letterSpacing:'.08em' }}>{h}</div>
+            ))}
+          </div>
 
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const dayLeadsList = leadsByDate[dateStr] || [];
-            const isToday    = dateStr === todayStr;
-            const isSelected = dateStr === selectedDay;
-            const hasLeads   = dayLeadsList.length > 0;
+          {/* Grid — rows fill remaining height */}
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            {(() => {
+              /* split cells into rows of 7 */
+              const rows = [];
+              for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+              const rowH = `${100 / rows.length}%`;
+              return rows.map((row, rIdx) => (
+                <div key={rIdx} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', flex:'1 0 0', borderBottom: rIdx < rows.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                  {row.map((day, cIdx) => {
+                    if (!day) return (
+                      <div key={`e-${rIdx}-${cIdx}`} style={{ borderRight: cIdx < 6 ? '1px solid #e2e8f0' : 'none', background:'#f8fafb' }} />
+                    );
 
-            return (
-              <div
-                key={dateStr}
-                id={`cal-day-${dateStr}`}
-                onClick={() => setSelectedDay(isSelected ? null : dateStr)}
-                className={`
-                  min-h-[90px] border-b border-r border-slate-800/50 p-2 cursor-pointer transition-all duration-150
-                  ${isSelected ? 'bg-[#FF6600]/10 border-[#FF6600]/30 ring-2 ring-inset ring-[#FF6600]/40 z-10 relative' : 'hover:bg-white/5'}
-                `}
-              >
-                <div className={`
-                  w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold mb-1 transition-colors
-                  ${isToday    ? 'bg-[#FF6600] text-white shadow-md shadow-orange-500/20'    : ''}
-                  ${isSelected && !isToday ? 'bg-[#FF6600]/20 text-[#FF6600]' : ''}
-                  ${!isToday && !isSelected ? 'text-slate-300' : ''}
-                `}>
-                  {day}
-                </div>
+                    const ds      = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                    const dLeads  = leadsByDate[ds] || [];
+                    const isToday = ds === todayStr;
+                    const isSel   = ds === selectedDay;
 
-                {hasLeads && (
-                  <div className="flex flex-col gap-1">
-                    {dayLeadsList.slice(0, 3).map(lead => {
-                      const fallback = { bg: 'bg-slate-500/20', text: 'text-slate-300', dot: 'bg-slate-500' };
-                      const colors = STAGE_COLORS[lead.stage] || STAGE_COLORS['Contacted'] || fallback;
-                      return (
-                        <div key={lead.id} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate border border-transparent ${colors.bg} ${colors.text} ${isSelected ? 'border-white/10' : ''}`}>
-                          <div className={`w-1 h-1 rounded-full flex-shrink-0 ${colors.dot}`} />
-                          <span className="truncate">{lead.name}</span>
+                    return (
+                      <div key={ds}
+                        onClick={() => setSelectedDay(isSel ? null : ds)}
+                        style={{
+                          borderRight: cIdx < 6 ? '1px solid #e2e8f0' : 'none',
+                          padding:'8px 10px', cursor:'pointer', overflow:'hidden',
+                          background: isSel ? '#fff7f0' : '#fff',
+                          boxShadow: isSel ? 'inset 0 0 0 2px #ff6500' : 'none',
+                          transition:'background .1s', display:'flex', flexDirection:'column',
+                        }}
+                        onMouseEnter={e => { if(!isSel) e.currentTarget.style.background='#fff7f0'; }}
+                        onMouseLeave={e => { if(!isSel) e.currentTarget.style.background='#fff'; }}
+                      >
+                        {/* Day number */}
+                        <div style={{
+                          width:26, height:26, borderRadius:'50%', flexShrink:0,
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          fontSize:'.82rem', fontWeight: isToday ? 800 : 700,
+                          color: isToday ? '#fff' : isSel ? '#ff6500' : '#111827',
+                          background: isToday ? '#ff6500' : 'transparent',
+                          marginBottom:4,
+                        }}>{day}</div>
+
+                        {/* Event pills */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:2, flex:1, overflow:'hidden' }}>
+                          {dLeads.slice(0, 3).map(lead => {
+                            const c = getPurposeColor(lead.purpose);
+                            return (
+                              <div key={lead.id} style={{
+                                display:'flex', alignItems:'center',
+                                background: c.bg, color: c.text,
+                                borderLeft: `3px solid ${c.bar}`,
+                                padding:'1px 5px', borderRadius:'0 3px 3px 0',
+                                fontSize:'.63rem', fontWeight:600,
+                                overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
+                              }}>
+                                <span style={{ overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{lead.name}</span>
+                              </div>
+                            );
+                          })}
+                          {dLeads.length > 3 && (
+                            <span style={{ fontSize:'.6rem', color:'#94a3b8' }}>+{dLeads.length - 3} more</span>
+                          )}
                         </div>
-                      );
-                    })}
-                    {dayLeadsList.length > 3 && (
-                      <span className="text-[10px] text-slate-500 pl-1">+{dayLeadsList.length - 3} more</span>
-                    )}
-                  </div>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:14, flexShrink:0 }}>
+          {PURPOSE_LIST.map(p => {
+            const c = PURPOSE_COLORS[p];
+            return (
+              <div key={p} style={{ display:'flex', alignItems:'center', gap:5, fontSize:'.68rem', color:'#374151', fontWeight:600 }}>
+                <span style={{ width:9, height:9, borderRadius:2, background:c.bar, flexShrink:0 }} />
+                {p}
               </div>
             );
           })}
         </div>
-
-        {/* Legend */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-[#0B0F19]/50 flex flex-wrap gap-3">
-          {Object.entries(STAGE_COLORS).map(([stage, colors]) => (
-            <div key={stage} className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium ${colors.bg} ${colors.text}`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-              {stage}
-            </div>
-          ))}
-        </div>
       </div>
 
-      {selectedDay ? (
-        <div className="lg:w-96 bg-[#151C2C] rounded-2xl shadow-sm border border-slate-800 flex flex-col overflow-hidden">
-          {/* Panel header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-[#0B0F19]/50">
-            <div className="flex items-center gap-3">
+      {/* ══════════════════════════════════════════
+          SIDE PANEL — selected day
+      ══════════════════════════════════════════ */}
+      <div style={{
+        width: selectedDay ? 320 : 0,
+        minWidth: selectedDay ? 320 : 0,
+        overflow:'hidden', transition:'width .2s ease, min-width .2s ease',
+        borderLeft:'1px solid #e5e7eb', background:'#fff', display:'flex', flexDirection:'column',
+        flexShrink:0,
+      }}>
+        {selectedDay && (
+          <>
+            {/* Panel header */}
+            <div style={{ padding:'14px 16px', borderBottom:'1px solid #f3f4f6', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexShrink:0 }}>
               <div>
-                <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Appointments</p>
-                <h3 className="text-lg font-bold text-white">
-                  {parseLocalDate(selectedDay).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                </h3>
+                <p style={{ fontSize:'.68rem', color:'#9ca3af', fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Appointments</p>
+                <p style={{ fontWeight:800, fontSize:'.9rem', color:'#111827', margin:'2px 0 0' }}>
+                  {parseLocal(selectedDay).toLocaleDateString('en-MY', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+                </p>
+                <span style={{ display:'inline-block', marginTop:4, background:'#fff7ed', color:'#ff6500', fontSize:'.7rem', fontWeight:800, padding:'1px 8px', borderRadius:99 }}>
+                  {dayLeads.length}
+                </span>
               </div>
-              <span className="bg-[#FF6600]/20 text-[#FF6600] text-xs font-bold px-2 py-0.5 rounded-md self-end mb-0.5">{dayLeads.length}</span>
+              <button onClick={() => setSelectedDay(null)} style={{ width:28, height:28, borderRadius:'50%', border:'1px solid #e5e7eb', background:'#f9fafb', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#6b7280', flexShrink:0 }}>
+                <X size={14} />
+              </button>
             </div>
-            <button
-              id="cal-close-panel"
-              onClick={() => { setSelectedDay(null); setEditingId(null); }}
-              className="p-2 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
-            {dayLeads.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-                <Calendar className="w-10 h-10 mb-3 opacity-30 text-slate-400" />
-                <p className="text-sm font-medium">No appointments this day</p>
-              </div>
-            ) : (
-              dayLeads
-                .slice()
-                .sort((a, b) => (a.time_slot || '').localeCompare(b.time_slot || ''))
-                .map(lead => {
-                  const isEditing = editingId === lead.id;
-                  const fallback  = { bg: 'bg-slate-500/20', text: 'text-slate-300', dot: 'bg-slate-500' };
-                  const colors    = STAGE_COLORS[lead.stage] || STAGE_COLORS['Contacted'] || fallback;
-                  return (
-                    <div key={lead.id} className="p-5 hover:bg-white/[0.02] transition-colors group">
-                      {/* Time + stage badge */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-1.5 text-sm text-slate-300">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-semibold">{lead.time_slot || 'No time'}</span>
-                        </div>
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide ${colors.bg} ${colors.text}`}>
-                          {lead.stage}
-                        </span>
-                      </div>
+            {/* Appointment list */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {dayLeads.length === 0 ? (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', color:'#9ca3af', fontSize:'.83rem', textAlign:'center', padding:24 }}>
+                  <span style={{ fontSize:'2rem', marginBottom:8 }}>📭</span>
+                  No appointments for this day
+                </div>
+              ) : dayLeads.map(lead => {
+                const c = getPurposeColor(lead.purpose);
+                return (
+                  <div key={lead.id} style={{ borderBottom:'1px solid #f3f4f6', padding:'12px 16px', transition:'background .1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
+                    onMouseLeave={e => e.currentTarget.style.background=''}
+                  >
+                    {/* Time + purpose pill */}
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                      <span style={{ fontSize:'.75rem', fontWeight:700, color:'#374151' }}>🕐 {lead.time_slot || 'No time'}</span>
+                      <span style={{ padding:'2px 8px', borderRadius:99, fontSize:'.62rem', fontWeight:700, background:c.bg, color:c.text, border:`1px solid ${c.dot}44` }}>
+                        {lead.purpose || 'Others'}
+                      </span>
+                    </div>
 
-                      <div className="mb-4">
-                        <p className="font-bold text-white text-base leading-tight mb-1">{lead.name}</p>
-                        <div className="space-y-1 mt-2">
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Phone className="w-3 h-3 text-slate-500" />{lead.phone}
-                          </div>
-                          {lead.company && (
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                              <Briefcase className="w-3 h-3 text-slate-500" />{lead.company}
-                            </div>
-                          )}
-                          {lead.purpose && (
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                              <Tag className="w-3 h-3 text-slate-500" />{lead.purpose}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    {/* Name */}
+                    <p style={{ fontWeight:800, fontSize:'.88rem', color:'#111827', margin:'0 0 4px' }}>{lead.name}</p>
 
-                      {isEditing ? (
-                        <div className="space-y-3 mt-4 pt-4 border-t border-slate-100">
-                          <div>
-                            <label className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Stage</label>
-                            <select name="stage" value={editForm.stage} onChange={handleEditChange} className="w-full text-sm border border-slate-700/50 rounded-xl px-3 py-2 bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/40 focus:border-[#FF6600] outline-none transition-all">
-                              {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                            <button onClick={() => handleSave(lead.id)} className="flex-1 flex justify-center items-center gap-1.5 px-3 py-2 bg-[#FF6600] text-white text-xs font-bold rounded-lg hover:bg-[#E65C00]">
-                              <Save className="w-3.5 h-3.5" /> Save
-                            </button>
-                            <button onClick={() => setEditingId(null)} className="flex-1 flex justify-center items-center gap-1.5 px-3 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors">
-                              <X className="w-3.5 h-3.5" /> Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-800/50">
-                          <div className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 opacity-70" />
-                            {lead.assigned_staff_name || 'Unassigned'}
-                          </div>
-                          <button
-                            id={`cal-edit-lead-${lead.id}`}
-                            onClick={() => handleEditClick(lead)}
-                            className="flex items-center gap-1 px-3 py-1.5 text-[#FF6600] text-xs font-bold bg-[#FF6600]/10 rounded-lg hover:bg-[#FF6600]/20 transition-colors opacity-0 group-hover:opacity-100"
-                          >
-                            <Edit2 className="w-3 h-3" /> Edit
-                          </button>
-                        </div>
+                    {/* Company */}
+                    {lead.company && <p style={{ fontSize:'.72rem', color:'#6b7280', margin:'0 0 2px' }}>🏢 {lead.company}</p>}
+
+                    {/* Stage */}
+                    <p style={{ fontSize:'.72rem', color:'#6b7280', margin:'0 0 8px' }}>📌 {lead.stage || 'New Lead'}</p>
+
+                    {/* Actions */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      {lead.phone && (
+                        <a href={`https://wa.me/${fmtWA(lead.phone)}`} target="_blank" rel="noreferrer"
+                          style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:6, background:'#dcfce7', color:'#16a34a', fontSize:'.72rem', fontWeight:700, textDecoration:'none' }}>
+                          <MessageCircle size={11} /> {lead.phone}
+                        </a>
                       )}
+                      <button onClick={() => openEdit(lead)} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:6, background:'#fff7ed', color:'#ff6500', fontSize:'.72rem', fontWeight:700, border:'none', cursor:'pointer' }}>
+                        <Edit2 size={11} /> Edit
+                      </button>
                     </div>
-                  );
-                })
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="lg:w-96 bg-[#151C2C] rounded-2xl shadow-sm border border-slate-800 flex flex-col items-center justify-center text-slate-400 py-20 px-8 text-center hidden lg:flex">
-          <Calendar className="w-12 h-12 mb-4 opacity-20 text-slate-300" />
-          <p className="text-sm font-bold text-white mb-1">Select a day to view appointments</p>
-          <p className="text-xs text-slate-500">Click any highlighted date on the calendar to see the day's schedule</p>
-        </div>
-      )}
+                  </div>
+                );
+              })}
+            </div>
 
-      {showSalesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSalesModal(false)} />
-          <div className="relative bg-[#151C2C] ring-1 ring-white/10 rounded-2xl shadow-2xl w-full max-w-md mx-4 border-t-4 border-emerald-500 overflow-hidden">
-            <form onSubmit={handleSalesSubmit}>
-              <div className="px-6 py-5">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-                    <DollarSign className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Record Sale</h3>
-                    <p className="text-xs text-slate-400">Closing this lead as Won</p>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {[
-                    { label: 'Invoice Number', key: 'invoice_no', type: 'text', placeholder: 'INV-0001' },
-                    { label: 'Purchased Items', key: 'items', type: 'text', placeholder: 'e.g. FeedMe + Sunmi T2' },
-                    { label: 'Total Amount (RM)', key: 'amount', type: 'number', placeholder: '1500.00' },
-                  ].map(({ label, key, type, placeholder }) => (
-                    <div key={key}>
-                      <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">{label}</label>
-                      <input
-                        type={type}
-                        required
-                        step={type === 'number' ? '0.01' : undefined}
-                        placeholder={placeholder}
-                        value={salesForm[key]}
-                        onChange={e => setSalesForm(prev => ({ ...prev, [key]: e.target.value }))}
-                        className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none placeholder:text-slate-600 transition-all"
-                      />
-                    </div>
-                  ))}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Payment Status</label>
-                    <select
-                        value={salesForm.payment_status}
-                        onChange={e => setSalesForm(prev => ({ ...prev, payment_status: e.target.value }))}
-                        className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none transition-all"
-                      >
-                        <option value="Paid">Paid</option>
-                        <option value="Pending">Pending</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-6 py-4 bg-[#0B0F19]/50 border-t border-slate-800 flex gap-3 justify-end">
-                  <button type="button" onClick={() => setShowSalesModal(false)}
-                    className="px-5 py-2 text-sm font-semibold text-slate-300 bg-slate-800 border-transparent rounded-xl hover:bg-slate-700 transition-colors">
-                    Cancel
-                  </button>
-                  <button type="submit"
-                    className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 transition-colors shadow-md shadow-emerald-500/20">
-                    Save Sale
-                  </button>
-                </div>
-            </form>
-          </div>
-        </div>
-      )}
+            {/* Add from panel */}
+            <div style={{ padding:'12px 16px', borderTop:'1px solid #f3f4f6', flexShrink:0 }}>
+              <button onClick={() => { setAddForm(f => ({ ...f, date: selectedDay })); setShowAdd(true); }}
+                style={{ width:'100%', padding:'9px', borderRadius:8, border:'1px dashed #ff6500', background:'#fff7ed', color:'#ff6500', fontWeight:700, fontSize:'.8rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                <Plus size={13} /> Add Appointment for this day
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* ── Add Appointment Modal ─────────────────────────────────────────── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-          <div className="relative bg-[#151C2C] ring-1 ring-white/10 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <form onSubmit={handleAddSubmit}>
-              <div className="px-6 py-5 border-b border-slate-800 bg-[#0B0F19]/50 flex justify-between items-center">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Plus className="w-5 h-5 text-[#FF6600]" /> Add Appointment</h3>
-                <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white transition-colors">
-                  <X className="w-5 h-5" />
+      {/* ══════════════════════════════════════════
+          ADD APPOINTMENT MODAL
+      ══════════════════════════════════════════ */}
+      {showAdd && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={() => setShowAdd(false)} style={{ position:'absolute', inset:0, background:'rgba(17,24,39,.45)', backdropFilter:'blur(2px)' }} />
+          <div style={{ position:'relative', background:'#fff', borderRadius:16, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 20px 60px rgba(0,0,0,.18)', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ padding:'18px 22px 14px', borderBottom:'1px solid #f3f4f6', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h3 style={{ fontWeight:800, fontSize:'1rem', color:'#111827', margin:0 }}>Add Appointment</h3>
+              <button onClick={() => setShowAdd(false)} style={{ width:28, height:28, borderRadius:'50%', border:'1px solid #e5e7eb', background:'#f9fafb', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#6b7280' }}><X size={14}/></button>
+            </div>
+            <form onSubmit={submitAdd} style={{ padding:'18px 22px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                <div style={{ gridColumn:'span 2' }}>
+                  <FL>Customer Name *</FL>
+                  <input required style={inp()} value={addForm.name} onChange={e => setAddForm(p=>({...p,name:e.target.value}))} placeholder="Full Name" />
+                </div>
+                <div>
+                  <FL>Phone *</FL>
+                  <input required style={inp()} value={addForm.phone} onChange={e => setAddForm(p=>({...p,phone:e.target.value}))} placeholder="+601xxxxxxxx" />
+                </div>
+                <div>
+                  <FL>Company / Industry</FL>
+                  <input style={inp()} value={addForm.company} onChange={e => setAddForm(p=>({...p,company:e.target.value}))} placeholder="e.g. F&B" />
+                </div>
+                <div>
+                  <FL>Date *</FL>
+                  <input required type="date" style={inp()} value={addForm.date} onChange={e => setAddForm(p=>({...p,date:e.target.value}))} />
+                </div>
+                <div>
+                  <FL>Time Slot</FL>
+                  <input style={inp()} value={addForm.time_slot} onChange={e => setAddForm(p=>({...p,time_slot:e.target.value}))} placeholder="e.g. 10:00 AM" />
+                </div>
+                <div>
+                  <FL>Purpose</FL>
+                  <select style={sel()} value={addForm.purpose} onChange={e => setAddForm(p=>({...p,purpose:e.target.value}))}>
+                    {PURPOSE_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <FL>Stage</FL>
+                  <select style={sel()} value={addForm.stage} onChange={e => setAddForm(p=>({...p,stage:e.target.value}))}>
+                    {STAGE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, paddingTop:4 }}>
+                <button type="button" onClick={() => setShowAdd(false)} style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#374151', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>Cancel</button>
+                <button type="submit" disabled={addSaving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:800, fontSize:'.85rem', cursor:'pointer', opacity:addSaving?.7:1 }}>
+                  {addSaving ? 'Saving…' : 'Save Appointment'}
                 </button>
               </div>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Customer Name*</label>
-                    <input type="text" required value={addForm.name} onChange={e => setAddForm({...addForm, name: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Phone*</label>
-                    <input type="text" required value={addForm.phone} onChange={e => setAddForm({...addForm, phone: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Company</label>
-                    <input type="text" value={addForm.company} onChange={e => setAddForm({...addForm, company: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Date</label>
-                    <input type="date" required value={addForm.date} onChange={e => setAddForm({...addForm, date: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none [color-scheme:dark]" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Time</label>
-                    <input type="text" placeholder="e.g. 10:00 AM" value={addForm.time_slot} onChange={e => setAddForm({...addForm, time_slot: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">Purpose</label>
-                    <input type="text" value={addForm.purpose} onChange={e => setAddForm({...addForm, purpose: e.target.value})} className="w-full border border-slate-700/50 rounded-xl px-3.5 py-2.5 text-sm bg-[#0B0F19] text-white focus:ring-2 focus:ring-[#FF6600]/30 focus:border-[#FF6600] outline-none" />
-                  </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════
+          EDIT APPOINTMENT MODAL
+      ══════════════════════════════════════════ */}
+      {editLead && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={() => setEditLead(null)} style={{ position:'absolute', inset:0, background:'rgba(17,24,39,.45)', backdropFilter:'blur(2px)' }} />
+          <div style={{ position:'relative', background:'#fff', borderRadius:16, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 20px 60px rgba(0,0,0,.18)', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ padding:'18px 22px 14px', borderBottom:'1px solid #f3f4f6', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h3 style={{ fontWeight:800, fontSize:'1rem', color:'#111827', margin:0 }}>Edit Appointment #{editLead.id}</h3>
+              <button onClick={() => setEditLead(null)} style={{ width:28, height:28, borderRadius:'50%', border:'1px solid #e5e7eb', background:'#f9fafb', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#6b7280' }}><X size={14}/></button>
+            </div>
+            <div style={{ padding:'18px 22px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                <div>
+                  <FL>Full Name</FL>
+                  <input style={inp()} value={editForm.name} onChange={e => setEditForm(p=>({...p,name:e.target.value}))} />
+                </div>
+                <div>
+                  <FL>Phone</FL>
+                  <input style={inp()} value={editForm.phone} onChange={e => setEditForm(p=>({...p,phone:e.target.value}))} />
+                </div>
+                <div>
+                  <FL>Company</FL>
+                  <input style={inp()} value={editForm.company} onChange={e => setEditForm(p=>({...p,company:e.target.value}))} />
+                </div>
+                <div>
+                  <FL>Purpose</FL>
+                  <select style={sel()} value={editForm.purpose} onChange={e => setEditForm(p=>({...p,purpose:e.target.value}))}>
+                    {PURPOSE_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <FL>Date</FL>
+                  <input type="date" style={inp()} value={editForm.date} onChange={e => setEditForm(p=>({...p,date:e.target.value}))} />
+                </div>
+                <div>
+                  <FL>Time Slot</FL>
+                  <input style={inp()} value={editForm.time_slot} onChange={e => setEditForm(p=>({...p,time_slot:e.target.value}))} placeholder="10:00 AM" />
+                </div>
+                <div style={{ gridColumn:'span 2' }}>
+                  <FL>Stage</FL>
+                  <select style={sel()} value={editForm.stage} onChange={e => setEditForm(p=>({...p,stage:e.target.value}))}>
+                    {STAGE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div style={{ gridColumn:'span 2' }}>
+                  <FL>Notes</FL>
+                  <textarea rows={2} style={{ ...inp(), resize:'vertical' }} value={editForm.notes} onChange={e => setEditForm(p=>({...p,notes:e.target.value}))} placeholder="Internal notes..." />
                 </div>
               </div>
-              <div className="px-6 py-4 bg-[#0B0F19]/50 border-t border-slate-800 flex gap-3 justify-end">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-5 py-2 text-sm font-semibold text-slate-300 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-sm font-bold text-white bg-[#FF6600] rounded-xl hover:bg-[#E65C00] transition-colors shadow-sm">Save Appointment</button>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, paddingTop:4 }}>
+                <button onClick={() => setEditLead(null)} style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#374151', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>Cancel</button>
+                <button onClick={submitEdit} disabled={editSaving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:800, fontSize:'.85rem', cursor:'pointer', opacity:editSaving?.7:1 }}>
+                  {editSaving ? 'Saving…' : 'Save Changes'}
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
