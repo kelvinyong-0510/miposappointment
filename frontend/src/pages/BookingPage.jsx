@@ -226,7 +226,7 @@ export default function BookingPage() {
               )}
 
               <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="form-grid-2">
                   <Field label={t.name} icon={User}>
                     <input className="field-input" type="text" name="name" required placeholder="John Doe" value={form.name} onChange={set} />
                   </Field>
@@ -239,7 +239,7 @@ export default function BookingPage() {
                   <input className="field-input" type="text" name="company" placeholder="Your Company Name" value={form.company} onChange={set} />
                 </Field>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="form-grid-2">
                   <Field label={t.date} icon={Calendar}>
                     <input className="field-input" type="date" name="date" required min={new Date().toISOString().split('T')[0]} value={form.date} onChange={set} onClick={(e) => { try { e.target.showPicker() } catch {} }} />
                   </Field>

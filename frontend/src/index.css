@@ -111,6 +111,18 @@ body {
   background: rgba(255,101,0,.04);
 }
 
+/* ─── Responsive form grid ───────────────────────────────────────────────── */
+/* Two-up fields (Name/Phone, Date/Time) collapse to one column on phones so
+   inputs stay wide enough to show their text instead of truncating. */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 520px) {
+  .form-grid-2 { grid-template-columns: 1fr; }
+}
+
 /* ─── Form inputs ────────────────────────────────────────────────────────── */
 .field-input {
   width: 100%;
