@@ -165,6 +165,33 @@ async function gcalDeleteEvent(env, eventId) {
   });
 }
 
+// Patch an existing event's time/details (used when an appointment is rescheduled
+// or its name/purpose is edited) so Google Calendar stays in sync.
+async function gcalUpdateEvent(env, eventId, lead) {
+  const times = slotToTimes(lead.date, lead.time_slot);
+  if (!times) return;
+  const token = await gcalAccessToken(env);
+  const calId = encodeURIComponent(env.GCAL_CALENDAR_ID);
+  const body = {
+    summary: `MIPOS Walk-In: ${lead.name || 'Customer'}${lead.purpose ? ' — ' + lead.purpose : ''}`,
+    description: [
+      `Name: ${lead.name || '-'}`,
+      `Phone: ${lead.phone || '-'}`,
+      `Company: ${lead.company || '-'}`,
+      `Purpose: ${lead.purpose || '-'}`,
+      '',
+      'Booked via appointment.mipos.me',
+    ].join('\n'),
+    start: { dateTime: times.start, timeZone: 'Asia/Kuala_Lumpur' },
+    end:   { dateTime: times.end,   timeZone: 'Asia/Kuala_Lumpur' },
+  };
+  await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── Stage helpers ────────────────────────────────────────────────────────────
 
 const STAGE_HEX = {
@@ -605,16 +632,24 @@ export default {
           vals.push(leadId);
           const r = await env.DB.prepare(`UPDATE leads SET ${sets.join(',')} WHERE id=?`).bind(...vals).run();
 
-          // Cancelled (stage → Lost / Closed Lost): remove its calendar event so
-          // the slot is freed both in the DB and on the synced calendar.
-          if (gcalEnabled(env) && ['Closed Lost', 'Lost'].includes(body.stage)) {
+          // Keep Google Calendar in sync with edits.
+          if (gcalEnabled(env)) {
             try {
-              const row = await env.DB.prepare('SELECT google_event_id FROM leads WHERE id=?').bind(leadId).first();
-              if (row?.google_event_id) {
+              const row = await env.DB.prepare(
+                'SELECT date,time_slot,name,phone,company,purpose,google_event_id FROM leads WHERE id=?'
+              ).bind(leadId).first();
+              const dead = ['Closed Lost', 'Lost'].includes(body.stage);
+              if (dead && row?.google_event_id) {
+                // Cancelled → remove the event (frees the slot on the calendar too).
                 await gcalDeleteEvent(env, row.google_event_id);
                 await env.DB.prepare('UPDATE leads SET google_event_id=NULL WHERE id=?').bind(leadId).run();
+              } else if (!dead && row?.google_event_id &&
+                         (body.date !== undefined || body.time_slot !== undefined ||
+                          body.name !== undefined || body.purpose !== undefined || body.purposes !== undefined)) {
+                // Rescheduled / details edited → patch the event in place.
+                await gcalUpdateEvent(env, row.google_event_id, row);
               }
-            } catch (e) { console.error('[GCal delete]', e.message); }
+            } catch (e) { console.error('[GCal sync]', e.message); }
           }
           return r.meta.changes ? json({ success: true }) : json({ error: 'Lead not found' }, 404);
         }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, X, MessageCircle, Edit2, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, MessageCircle, Edit2, Plus, Trash2 } from 'lucide-react';
 import { normalizePhone } from '../phone';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -144,9 +144,20 @@ export default function CalendarView() {
         body: JSON.stringify(editForm),
       });
       setEditLead(null);
-      fetchLeads();
+      fetchLeads(true);
     } catch(e){ console.error(e); }
     finally { setEditSaving(false); }
+  };
+
+  /* ── Delete appointment (syncs to DB + Google Calendar) ── */
+  const deleteLead = async (lead) => {
+    if (!lead) return;
+    if (!window.confirm(`Delete appointment for "${lead.name || lead.phone}"? This also removes it from Google Calendar.`)) return;
+    try {
+      await fetch(`${API_URL}/leads/${lead.id}`, { method: 'DELETE' });
+      setEditLead(null);
+      fetchLeads(true);
+    } catch(e){ console.error(e); }
   };
 
   /* ── Styles ── */
@@ -383,6 +394,9 @@ export default function CalendarView() {
                       <button onClick={() => openEdit(lead)} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:6, background:'#fff7ed', color:'#ff6500', fontSize:'.72rem', fontWeight:700, border:'none', cursor:'pointer' }}>
                         <Edit2 size={11} /> Edit
                       </button>
+                      <button onClick={() => deleteLead(lead)} title="Delete" style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:6, background:'#fef2f2', color:'#ef4444', fontSize:'.72rem', fontWeight:700, border:'none', cursor:'pointer' }}>
+                        <Trash2 size={11} /> Delete
+                      </button>
                     </div>
                   </div>
                 );
@@ -507,11 +521,16 @@ export default function CalendarView() {
                   <textarea rows={2} style={{ ...inp(), resize:'vertical' }} value={editForm.notes} onChange={e => setEditForm(p=>({...p,notes:e.target.value}))} placeholder="Internal notes..." />
                 </div>
               </div>
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, paddingTop:4 }}>
-                <button onClick={() => setEditLead(null)} style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#374151', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>Cancel</button>
-                <button onClick={submitEdit} disabled={editSaving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:800, fontSize:'.85rem', cursor:'pointer', opacity:editSaving?.7:1 }}>
-                  {editSaving ? 'Saving…' : 'Save Changes'}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, paddingTop:4 }}>
+                <button onClick={() => deleteLead(editLead)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 16px', borderRadius:8, border:'1px solid #fecaca', background:'#fef2f2', color:'#ef4444', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>
+                  <Trash2 size={14} /> Delete
                 </button>
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={() => setEditLead(null)} style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#374151', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>Cancel</button>
+                  <button onClick={submitEdit} disabled={editSaving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:800, fontSize:'.85rem', cursor:'pointer', opacity:editSaving?.7:1 }}>
+                    {editSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
