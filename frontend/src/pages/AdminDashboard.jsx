@@ -7,9 +7,10 @@ import NewAppointmentModal from '../components/NewAppointmentModal';
 import axios from 'axios';
 import {
   LogOut, MessageCircle, Edit2, Trash2, Plus, Check, X,
-  Search, UserCheck, UserX, Clock, Save,
+  Search, UserCheck, UserX, Clock, Save, RefreshCw,
 } from 'lucide-react';
 import { leadPurposeLabels, teamLabel, PURPOSES } from '../purposes';
+import { normalizePhone } from '../phone';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -149,12 +150,27 @@ function AppointmentsView() {
   const [search, setSearch]   = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editLead, setEditLead]     = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt]   = useState(null);
 
-  const load = () => {
-    setLoading(true);
-    axios.get(`${API_URL}/leads`).then(r => setLeads(Array.isArray(r.data) ? r.data : [])).catch(() => setLeads([])).finally(() => setLoading(false));
+  // silent=true → background refresh (no full-screen "Loading…" flash)
+  const load = (silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true);
+    axios.get(`${API_URL}/leads`)
+      .then(r => { setLeads(Array.isArray(r.data) ? r.data : []); setUpdatedAt(new Date()); })
+      .catch(() => { if (!silent) setLeads([]); })
+      .finally(() => { setLoading(false); setRefreshing(false); });
   };
-  useEffect(load, []);
+
+  // Initial load + auto-refresh every 15s, and refresh when the tab regains focus.
+  useEffect(() => {
+    load();
+    const id = setInterval(() => load(true), 15000);
+    const onVis = () => { if (document.visibilityState === 'visible') load(true); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+    // eslint-disable-next-line
+  }, []);
 
   const counts = {};
   RANGES.forEach(r => { counts[r.key] = leads.filter(l => inRange(l.date, r.key)).length; });
@@ -173,11 +189,11 @@ function AppointmentsView() {
   const setAttendance = async (lead, value) => {
     const next = lead.attendance === value ? null : value;
     setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, attendance: next } : l));
-    try { await axios.put(`${API_URL}/leads/${lead.id}`, { attendance: next }); } catch { load(); }
+    try { await axios.put(`${API_URL}/leads/${lead.id}`, { attendance: next }); } catch { load(true); }
   };
   const removeLead = async (lead) => {
     if (!window.confirm(`Delete appointment for "${lead.name || lead.phone}"? This cannot be undone.`)) return;
-    await axios.delete(`${API_URL}/leads/${lead.id}`); load();
+    await axios.delete(`${API_URL}/leads/${lead.id}`); load(true);
   };
 
   return (
@@ -188,9 +204,16 @@ function AppointmentsView() {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a202c', letterSpacing: '-.02em', margin: 0 }}>Appointments</h1>
           <p style={{ color: '#6b7280', fontSize: '.85rem', margin: '3px 0 0' }}>Walk-in bookings, attendance & scheduling</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-brand" style={{ padding: '11px 20px', borderRadius: 24 }}>
-          <Plus size={16} /> New Appointment
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => load(true)} title="Refresh now"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 24, border: '1px solid #e5e7eb', background: '#fff', color: '#4a5568', fontSize: '.78rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+            <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
+            {updatedAt ? `Updated ${updatedAt.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Refresh'}
+          </button>
+          <button onClick={() => setShowCreate(true)} className="btn-brand" style={{ padding: '11px 20px', borderRadius: 24 }}>
+            <Plus size={16} /> New Appointment
+          </button>
+        </div>
       </div>
 
       {/* Range pills */}
@@ -293,8 +316,8 @@ function AppointmentsView() {
         </div>
       </div>
 
-      {showCreate && <NewAppointmentModal onClose={() => setShowCreate(false)} onCreated={load} />}
-      {editLead   && <EditModal lead={editLead} onClose={() => setEditLead(null)} onSaved={load} />}
+      {showCreate && <NewAppointmentModal onClose={() => setShowCreate(false)} onCreated={() => load(true)} />}
+      {editLead   && <EditModal lead={editLead} onClose={() => setEditLead(null)} onSaved={() => load(true)} />}
     </div>
   );
 }
@@ -358,7 +381,7 @@ function EditModal({ lead, onClose, onSaved }) {
         <div style={{ padding: 22, overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             <div><ELabel>Full Name</ELabel><input style={einp} value={f.name} onChange={e => set('name', e.target.value)} /></div>
-            <div><ELabel>Phone</ELabel><input style={einp} value={f.phone} onChange={e => set('phone', e.target.value)} /></div>
+            <div><ELabel>Phone</ELabel><input style={einp} value={f.phone} onChange={e => set('phone', e.target.value)} onBlur={e => set('phone', normalizePhone(e.target.value))} /></div>
           </div>
           <div style={{ marginBottom: 14 }}><ELabel>Company</ELabel><input style={einp} value={f.company} onChange={e => set('company', e.target.value)} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>

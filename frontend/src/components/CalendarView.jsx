@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, X, MessageCircle, Edit2, Plus } from 'lucide-react';
+import { normalizePhone } from '../phone';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -49,6 +50,8 @@ export default function CalendarView() {
   const [today]                       = useState(new Date());
   const [viewDate,    setViewDate]    = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState(null);
+  const [dragLead,    setDragLead]    = useState(null);
+  const [dragOverDay, setDragOverDay] = useState(null);
 
   /* Add modal */
   const [showAdd,  setShowAdd]  = useState(false);
@@ -60,14 +63,32 @@ export default function CalendarView() {
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
 
-  const fetchLeads = useCallback(() => {
+  const fetchLeads = useCallback((silent = false) => {
     fetch(`${API_URL}/leads`)
       .then(r => r.json())
       .then(d => setLeads(Array.isArray(d) ? d : []))
-      .catch(() => setLeads([]));
+      .catch(() => { if (!silent) setLeads([]); });
   }, []);
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  // Initial load + auto-refresh every 15s so the calendar stays current.
+  useEffect(() => {
+    fetchLeads();
+    const id = setInterval(() => fetchLeads(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchLeads]);
+
+  // Drag-to-reschedule: move an appointment to another day (keeps its time slot).
+  const reschedule = async (lead, newDate) => {
+    if (!lead || !newDate || lead.date === newDate) return;
+    setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, date: newDate } : l)); // optimistic
+    try {
+      await fetch(`${API_URL}/leads/${lead.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: newDate }),
+      });
+    } finally { fetchLeads(true); }
+  };
+  const primaryPurpose = (lead) => (lead.purpose || '').split(',')[0].trim();
 
   /* ── Calendar maths ── */
   const year  = viewDate.getFullYear();
@@ -212,15 +233,19 @@ export default function CalendarView() {
                     const dLeads  = leadsByDate[ds] || [];
                     const isToday = ds === todayStr;
                     const isSel   = ds === selectedDay;
+                    const isDragOver = dragOverDay === ds;
 
                     return (
                       <div key={ds}
                         onClick={() => setSelectedDay(isSel ? null : ds)}
+                        onDragOver={e => { e.preventDefault(); if (dragOverDay !== ds) setDragOverDay(ds); }}
+                        onDragLeave={() => setDragOverDay(d => d === ds ? null : d)}
+                        onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); setDragOverDay(null); setDragLead(null); const lead = leads.find(l => String(l.id) === id); if (lead) reschedule(lead, ds); }}
                         style={{
                           borderRight: cIdx < 6 ? '1px solid #e2e8f0' : 'none',
                           padding:'8px 10px', cursor:'pointer', overflow:'hidden',
                           background: isSel ? '#fff7f0' : '#fff',
-                          boxShadow: isSel ? 'inset 0 0 0 2px #ff6500' : 'none',
+                          boxShadow: isDragOver ? 'inset 0 0 0 2px #ff6500, inset 0 0 0 999px rgba(255,101,0,.09)' : isSel ? 'inset 0 0 0 2px #ff6500' : 'none',
                           transition:'background .1s', display:'flex', flexDirection:'column',
                         }}
                         onMouseEnter={e => { if(!isSel) e.currentTarget.style.background='#fff7f0'; }}
@@ -239,16 +264,24 @@ export default function CalendarView() {
                         {/* Event pills */}
                         <div style={{ display:'flex', flexDirection:'column', gap:2, flex:1, overflow:'hidden' }}>
                           {dLeads.slice(0, 3).map(lead => {
-                            const c = getPurposeColor(lead.purpose);
+                            const c = getPurposeColor(primaryPurpose(lead));
+                            const dragging = dragLead?.id === lead.id;
                             return (
-                              <div key={lead.id} style={{
-                                display:'flex', alignItems:'center',
-                                background: c.bg, color: c.text,
-                                borderLeft: `3px solid ${c.bar}`,
-                                padding:'1px 5px', borderRadius:'0 3px 3px 0',
-                                fontSize:'.63rem', fontWeight:600,
-                                overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
-                              }}>
+                              <div key={lead.id}
+                                draggable
+                                onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', String(lead.id)); e.dataTransfer.effectAllowed = 'move'; setDragLead(lead); }}
+                                onDragEnd={() => { setDragLead(null); setDragOverDay(null); }}
+                                onClick={e => { e.stopPropagation(); openEdit(lead); }}
+                                title={`${lead.name} · ${lead.time_slot || 'no time'} — drag to another day to reschedule`}
+                                style={{
+                                  display:'flex', alignItems:'center',
+                                  background: c.bg, color: c.text,
+                                  borderLeft: `3px solid ${c.bar}`,
+                                  padding:'1px 5px', borderRadius:'0 3px 3px 0',
+                                  fontSize:'.63rem', fontWeight:600,
+                                  overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
+                                  cursor:'grab', opacity: dragging ? .4 : 1,
+                                }}>
                                 <span style={{ overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{lead.name}</span>
                               </div>
                             );
@@ -386,7 +419,7 @@ export default function CalendarView() {
                 </div>
                 <div>
                   <FL>Phone *</FL>
-                  <input required style={inp()} value={addForm.phone} onChange={e => setAddForm(p=>({...p,phone:e.target.value}))} placeholder="+601xxxxxxxx" />
+                  <input required style={inp()} value={addForm.phone} onChange={e => setAddForm(p=>({...p,phone:e.target.value}))} onBlur={e => setAddForm(p=>({...p,phone:normalizePhone(e.target.value)}))} placeholder="012-3456789" />
                 </div>
                 <div>
                   <FL>Company / Industry</FL>
@@ -443,7 +476,7 @@ export default function CalendarView() {
                 </div>
                 <div>
                   <FL>Phone</FL>
-                  <input style={inp()} value={editForm.phone} onChange={e => setEditForm(p=>({...p,phone:e.target.value}))} />
+                  <input style={inp()} value={editForm.phone} onChange={e => setEditForm(p=>({...p,phone:e.target.value}))} onBlur={e => setEditForm(p=>({...p,phone:normalizePhone(e.target.value)}))} />
                 </div>
                 <div>
                   <FL>Company</FL>

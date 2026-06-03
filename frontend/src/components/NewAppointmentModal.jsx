@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { X, Check, Tag, ArrowRight } from 'lucide-react';
 import { PURPOSES, purposeLabel } from '../purposes';
+import { normalizePhone } from '../phone';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 const inp = { width: '100%', boxSizing: 'border-box', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', fontSize: '.88rem', fontFamily: 'var(--font-sans)', outline: 'none', background: '#f9fafb', color: '#111827' };
@@ -61,7 +62,7 @@ export default function NewAppointmentModal({ onClose, onCreated }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
             <div><FL>Full Name</FL><input style={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Customer name" /></div>
-            <div><FL>Phone *</FL><input style={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="012-3456789" /></div>
+            <div><FL>Phone *</FL><input style={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} onBlur={e => setForm(f => ({ ...f, phone: normalizePhone(e.target.value) }))} placeholder="012-3456789" /></div>
           </div>
           <div style={{ marginBottom: 16 }}><FL>Company (optional)</FL><input style={inp} value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="Company" /></div>
 

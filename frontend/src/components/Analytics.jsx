@@ -5,19 +5,12 @@ import {
   ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell,
   LineChart, Line
 } from 'recharts';
-import { TrendingUp, ArrowDownRight, FileText, XCircle, Receipt, PhoneCall } from 'lucide-react';
+import { Users, UserCheck, UserX, XCircle } from 'lucide-react';
+import { leadPurposeLabels } from '../purposes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const STAGE_COLORS = ['#3B82F6','#6366F1','#FF6600','#8B5CF6','#EAB308','#EC4899','#10B981','#EF4444','#06B6D4','#A78BFA'];
-
-const FUNNEL_STAGES = [
-  { key: 'New Lead',     label: 'New Lead',   color: '#e2e8f0', text: '#64748b' },
-  { key: 'Contacted',   label: 'Contacted',  color: '#bfdbfe', text: '#1d4ed8' },
-  { key: 'Quotation sent', label: 'Quotation', color: '#fed7aa', text: '#c2410c' },
-  { key: 'Invoice sent', label: 'Invoice',   color: '#ddd6fe', text: '#6d28d9' },
-  { key: 'Closed Won',  label: 'Won',        color: '#bbf7d0', text: '#15803d' },
-];
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -59,12 +52,9 @@ export default function Analytics() {
 
   /* ── KPI calculations ── */
   const totalLeads = leads.length;
-  const won        = leads.filter(l => l.stage === 'Closed Won').length;
-  const lost       = leads.filter(l => l.stage === 'Closed Lost' || l.stage === 'Lost').length;
-  const contacted  = leads.filter(l => l.stage === 'Contacted').length;
-  const quotation  = leads.filter(l => l.stage === 'Quotation sent' || l.quotation_no).length;
-  const invoice    = leads.filter(l => l.stage === 'Invoice sent'   || l.invoice_no).length;
-  const convRate   = pct(won, totalLeads);
+  const attended   = leads.filter(l => l.attendance === 'attended').length;
+  const noShow     = leads.filter(l => l.attendance === 'no_show').length;
+  const cancelled  = leads.filter(l => l.stage === 'Closed Lost' || l.stage === 'Lost').length;
 
   /* ── Dynamic Walk-ins Comparison (Time Filter) ── */
   const todayObj = new Date();
@@ -162,14 +152,6 @@ export default function Analytics() {
 
   const monthlyChart = monthly.map(m => ({ name: m.month?.slice(0, 7) || m.month, count: m.count }));
 
-  /* ── Funnel counts from leads ── */
-  const stageCounts = FUNNEL_STAGES.map(s => ({
-    ...s,
-    count: leads.filter(l => l.stage === s.key).length,
-    pct:   totalLeads > 0 ? Math.round((leads.filter(l => l.stage === s.key).length / totalLeads) * 100) : 0,
-  }));
-  const maxCount = Math.max(...stageCounts.map(s => s.count), 1);
-
   /* Purpose breakdown */
   const allPurposes = [
     'POS System', 'Hardware Devices (Sunmi)', 'Technical Support',
@@ -178,9 +160,10 @@ export default function Analytics() {
   const purposeMap = {};
   allPurposes.forEach(p => purposeMap[p] = 0);
   leads.forEach(l => {
-    const p = l.purpose || 'Others';
-    if (purposeMap[p] !== undefined) purposeMap[p]++;
-    else purposeMap['Others']++;
+    leadPurposeLabels(l).forEach(label => {
+      if (purposeMap[label] !== undefined) purposeMap[label]++;
+      else purposeMap['Others']++;
+    });
   });
   const purposeChart = Object.entries(purposeMap).sort((a,b) => b[1]-a[1])
     .map(([name, value]) => ({ name, value }));
@@ -214,52 +197,52 @@ export default function Analytics() {
       {/* KPI CARDS */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
 
-        {/* Contacted */}
-        <div style={card({ borderTop: '3px solid #6366f1' })}>
+        {/* Total appointments */}
+        <div style={card({ borderTop: '3px solid #ff6500' })}>
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
-            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Contacted</p>
-            <div style={{ width:32, height:32, borderRadius:8, background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <PhoneCall size={15} color="#6366f1" />
+            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Appointments</p>
+            <div style={{ width:32, height:32, borderRadius:8, background:'#fff7ed', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Users size={15} color="#ff6500" />
             </div>
           </div>
-          <p style={{ fontSize:'2rem', fontWeight:900, color:'#6366f1', margin:'0 0 4px', lineHeight:1 }}>{contacted}</p>
-          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Stage: Contacted</p>
+          <p style={{ fontSize:'2rem', fontWeight:900, color:'#ff6500', margin:'0 0 4px', lineHeight:1 }}>{fmt(totalLeads)}</p>
+          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Total bookings</p>
         </div>
 
-        {/* Quotation */}
-        <div style={card({ borderTop: '3px solid #ca8a04' })}>
-          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
-            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Quotation</p>
-            <div style={{ width:32, height:32, borderRadius:8, background:'#fefce8', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <FileText size={15} color="#ca8a04" />
-            </div>
-          </div>
-          <p style={{ fontSize:'2rem', fontWeight:900, color:'#ca8a04', margin:'0 0 4px', lineHeight:1 }}>{quotation}</p>
-          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Sent / with no.</p>
-        </div>
-
-        {/* Invoice */}
+        {/* Attended */}
         <div style={card({ borderTop: '3px solid #16a34a' })}>
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
-            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Invoice</p>
+            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Attended</p>
             <div style={{ width:32, height:32, borderRadius:8, background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <Receipt size={15} color="#16a34a" />
+              <UserCheck size={15} color="#16a34a" />
             </div>
           </div>
-          <p style={{ fontSize:'2rem', fontWeight:900, color:'#16a34a', margin:'0 0 4px', lineHeight:1 }}>{invoice}</p>
-          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Sent / with no.</p>
+          <p style={{ fontSize:'2rem', fontWeight:900, color:'#16a34a', margin:'0 0 4px', lineHeight:1 }}>{attended}</p>
+          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>{pct(attended, totalLeads)}% show-up rate</p>
         </div>
 
-        {/* Lost */}
+        {/* No-show */}
+        <div style={card({ borderTop: '3px solid #ea580c' })}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
+            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>No-show</p>
+            <div style={{ width:32, height:32, borderRadius:8, background:'#fff7ed', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <UserX size={15} color="#ea580c" />
+            </div>
+          </div>
+          <p style={{ fontSize:'2rem', fontWeight:900, color:'#ea580c', margin:'0 0 4px', lineHeight:1 }}>{noShow}</p>
+          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Marked no-show</p>
+        </div>
+
+        {/* Cancelled */}
         <div style={card({ borderTop: '3px solid #ef4444' })}>
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
-            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Lost</p>
+            <p style={{ fontSize:'.68rem', fontWeight:700, color:'#64748b', letterSpacing:'.06em', textTransform:'uppercase', margin:0 }}>Cancelled</p>
             <div style={{ width:32, height:32, borderRadius:8, background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center' }}>
               <XCircle size={15} color="#ef4444" />
             </div>
           </div>
-          <p style={{ fontSize:'2rem', fontWeight:900, color:'#ef4444', margin:'0 0 4px', lineHeight:1 }}>{lost}</p>
-          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Closed lost</p>
+          <p style={{ fontSize:'2rem', fontWeight:900, color:'#ef4444', margin:'0 0 4px', lineHeight:1 }}>{cancelled}</p>
+          <p style={{ fontSize:'.72rem', color:'#9ca3af', margin:0, fontWeight:500 }}>Cancelled / lost</p>
         </div>
       </div>
 

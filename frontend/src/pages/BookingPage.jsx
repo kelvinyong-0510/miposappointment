@@ -6,6 +6,7 @@ import {
   MessageCircle, ChevronDown, ArrowRight,
 } from 'lucide-react';
 import { PURPOSES, purposeLabel } from '../purposes';
+import { normalizePhone } from '../phone';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -284,7 +285,7 @@ export default function BookingPage() {
                     <input className="field-input" type="text" name="name" required placeholder="John Doe" value={form.name} onChange={set} />
                   </Field>
                   <Field label={`${t.phone} *`} icon={Phone}>
-                    <input className="field-input" type="tel" name="phone" required placeholder="012-3456789" value={form.phone} onChange={set} />
+                    <input className="field-input" type="tel" name="phone" required placeholder="012-3456789" value={form.phone} onChange={set} onBlur={e => setForm(f => ({ ...f, phone: normalizePhone(e.target.value) }))} />
                   </Field>
                 </div>
 
