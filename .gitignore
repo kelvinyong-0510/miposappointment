@@ -27,3 +27,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 .gstack/
+
+# Wrangler local dev state
+.wrangler/
+worker/.wrangler/
