@@ -31,6 +31,31 @@ async function sha256(str) {
 // (stage 'Closed Lost' / 'Lost') free the slot again.
 const DEAD_STAGES = "('Closed Lost','Lost')";
 
+// ─── Departments ──────────────────────────────────────────────────────────────
+// Purposes are stored as canonical keys. The POS team handles 'pos' only; every
+// other purpose is handled by the CS (Customer Success) team. A booking can need
+// both teams (e.g. picks POS System + Queue System) and then consumes one seat
+// from each team's per-slot capacity.
+function teamsForPurposes(purposes) {
+  const arr = Array.isArray(purposes) ? purposes : [];
+  return {
+    needs_pos: arr.includes('pos') ? 1 : 0,
+    needs_cs:  arr.some(p => p && p !== 'pos') ? 1 : 0,
+  };
+}
+
+// "10:00 AM" / "2:30 PM" → 1000 / 1430 (sortable 24h key). null if unparseable.
+function timeToSort(slot) {
+  const m = String(slot || '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = m[3].toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return h * 100 + min;
+}
+
 // ─── Google Calendar (service account) ────────────────────────────────────────
 // Set via `wrangler secret put`: GCAL_CLIENT_EMAIL, GCAL_PRIVATE_KEY, GCAL_CALENDAR_ID.
 // When any is missing, calendar sync is silently skipped (booking still works).
@@ -404,17 +429,67 @@ export default {
         }
       }
 
+      // ── Slots (master config) ─────────────────────────────────────────────
+      if (path === '/api/slots' && method === 'GET') {
+        const { results } = await env.DB.prepare('SELECT * FROM slots ORDER BY sort_order').all();
+        return json(results);
+      }
+      if (path === '/api/slots' && method === 'POST') {
+        const { time, pos_capacity, cs_capacity } = await request.json();
+        const so = timeToSort(time);
+        if (so === null) return json({ error: 'Invalid time. Use e.g. "10:00 AM" or "2:30 PM".' }, 400);
+        await env.DB.prepare(
+          `INSERT OR REPLACE INTO slots(time,sort_order,pos_capacity,cs_capacity,active)
+           VALUES(?,?,?,?,COALESCE((SELECT active FROM slots WHERE time=?),1))`
+        ).bind(time, so, pos_capacity ?? 1, cs_capacity ?? 2, time).run();
+        return json({ success: true }, 201);
+      }
+      const slotTime = path.match(/^\/api\/slots\/(.+)$/)?.[1];
+      if (slotTime) {
+        const time = decodeURIComponent(slotTime);
+        if (method === 'PUT') {
+          const b = await request.json();
+          const sets = [], vals = [];
+          if (b.pos_capacity !== undefined) { sets.push('pos_capacity=?'); vals.push(b.pos_capacity); }
+          if (b.cs_capacity  !== undefined) { sets.push('cs_capacity=?');  vals.push(b.cs_capacity); }
+          if (b.active       !== undefined) { sets.push('active=?');       vals.push(b.active ? 1 : 0); }
+          if (!sets.length) return json({ success: true, changes: 0 });
+          vals.push(time);
+          const r = await env.DB.prepare(`UPDATE slots SET ${sets.join(',')} WHERE time=?`).bind(...vals).run();
+          return json({ success: true, changes: r.meta.changes });
+        }
+        if (method === 'DELETE') {
+          const r = await env.DB.prepare('DELETE FROM slots WHERE time=?').bind(time).run();
+          return r.meta.changes ? json({ success: true }) : json({ error: 'Slot not found' }, 404);
+        }
+      }
+
       // ── Availability ──────────────────────────────────────────────────────
-      // Which slots are already booked for a date (active appointments only).
+      // Per-slot, per-team booked counts + capacities for a date (active slots).
       if (path === '/api/availability' && method === 'GET') {
         const date = url.searchParams.get('date');
         if (!date) return json({ error: 'date query param required' }, 400);
-        const { results } = await env.DB.prepare(
-          `SELECT DISTINCT time_slot FROM leads
-           WHERE date=? AND time_slot IS NOT NULL AND time_slot!=''
-             AND stage NOT IN ${DEAD_STAGES}`
+        const { results: slotRows } = await env.DB.prepare(
+          'SELECT time, pos_capacity, cs_capacity FROM slots WHERE active=1 ORDER BY sort_order'
+        ).all();
+        const { results: booked } = await env.DB.prepare(
+          `SELECT time_slot,
+                  COALESCE(SUM(needs_pos),0) AS pos,
+                  COALESCE(SUM(needs_cs),0)  AS cs
+           FROM leads
+           WHERE date=? AND time_slot IS NOT NULL AND time_slot!='' AND stage NOT IN ${DEAD_STAGES}
+           GROUP BY time_slot`
         ).bind(date).all();
-        return json({ date, booked: results.map(r => r.time_slot) });
+        const bmap = {};
+        booked.forEach(b => { bmap[b.time_slot] = { pos: b.pos, cs: b.cs }; });
+        const slots = slotRows.map(s => ({
+          time: s.time,
+          pos_capacity: s.pos_capacity,
+          cs_capacity: s.cs_capacity,
+          pos_booked: bmap[s.time]?.pos || 0,
+          cs_booked: bmap[s.time]?.cs || 0,
+        }));
+        return json({ date, slots });
       }
 
       // ── Leads ─────────────────────────────────────────────────────────────
@@ -447,35 +522,52 @@ export default {
           const company   = body.company   ?? null;
           const date      = body.date      ?? null;
           const time_slot = body.time_slot ?? null;
-          const purpose   = body.purpose   ?? null;
+          const purposesArr = Array.isArray(body.purposes) ? body.purposes : [];
+          const purposeStr  = body.purpose ?? (purposesArr.length ? purposesArr.join(', ') : null);
+          const purposesJson = purposesArr.length ? JSON.stringify(purposesArr) : null;
+          const { needs_pos, needs_cs } = teamsForPurposes(purposesArr);
+          const source = body.source === 'admin' ? 'admin' : 'customer';
 
           let newId;
           if (date && time_slot) {
-            // Atomic 1-booking-per-slot guard: insert only if no active lead
-            // already holds this date+slot. changes===0 ⇒ slot just taken.
+            // Slot must exist and be active.
+            const slot = await env.DB.prepare(
+              'SELECT pos_capacity, cs_capacity, active FROM slots WHERE time=?'
+            ).bind(time_slot).first();
+            if (!slot || !slot.active) {
+              return json({ error: 'slot_unavailable', message: 'That time slot is not available.' }, 409);
+            }
+            // Atomic department-aware capacity guard: insert only if each team
+            // the booking needs still has a free seat. changes===0 ⇒ full.
             const r = await env.DB.prepare(
-              `INSERT INTO leads(name,phone,company,date,time_slot,purpose)
-               SELECT ?,?,?,?,?,?
-               WHERE NOT EXISTS (
-                 SELECT 1 FROM leads
-                 WHERE date=? AND time_slot=? AND stage NOT IN ${DEAD_STAGES}
-               )`
-            ).bind(name, phone, company, date, time_slot, purpose, date, time_slot).run();
+              `INSERT INTO leads(name,phone,company,date,time_slot,purpose,purposes,needs_pos,needs_cs,source)
+               SELECT ?,?,?,?,?,?,?,?,?,?
+               WHERE
+                 ( ?=0 OR (SELECT COALESCE(SUM(needs_pos),0) FROM leads
+                           WHERE date=? AND time_slot=? AND stage NOT IN ${DEAD_STAGES}) < ? )
+                 AND
+                 ( ?=0 OR (SELECT COALESCE(SUM(needs_cs),0) FROM leads
+                           WHERE date=? AND time_slot=? AND stage NOT IN ${DEAD_STAGES}) < ? )`
+            ).bind(
+              name, phone, company, date, time_slot, purposeStr, purposesJson, needs_pos, needs_cs, source,
+              needs_pos, date, time_slot, slot.pos_capacity,
+              needs_cs,  date, time_slot, slot.cs_capacity
+            ).run();
             if (!r.meta.changes) {
-              return json({ error: 'slot_taken', message: 'That time slot has just been booked. Please pick another.' }, 409);
+              return json({ error: 'slot_taken', message: 'That time slot is fully booked for this service. Please pick another.' }, 409);
             }
             newId = r.meta.last_row_id;
           } else {
             const r = await env.DB.prepare(
-              'INSERT INTO leads(name,phone,company,date,time_slot,purpose) VALUES(?,?,?,?,?,?)'
-            ).bind(name, phone, company, date, time_slot, purpose).run();
+              'INSERT INTO leads(name,phone,company,date,time_slot,purpose,purposes,needs_pos,needs_cs,source) VALUES(?,?,?,?,?,?,?,?,?,?)'
+            ).bind(name, phone, company, date, time_slot, purposeStr, purposesJson, needs_pos, needs_cs, source).run();
             newId = r.meta.last_row_id;
           }
 
           // Mirror to Google Calendar (best-effort — never fails the booking).
           if (gcalEnabled(env)) {
             try {
-              const eid = await gcalCreateEvent(env, { name, phone, company, date, time_slot, purpose });
+              const eid = await gcalCreateEvent(env, { name, phone, company, date, time_slot, purpose: purposeStr });
               if (eid) await env.DB.prepare('UPDATE leads SET google_event_id=? WHERE id=?').bind(eid, newId).run();
             } catch (e) { console.error('[GCal create]', e.message); }
           }
@@ -492,13 +584,22 @@ export default {
         }
         if (method === 'PUT') {
           const body  = await request.json();
-          const FIELDS = ['stage','status','products_interest','assigned_staff','quotation_no','invoice_no','notes'];
+          const FIELDS = ['name','phone','company','date','time_slot','purpose','attendance',
+                          'stage','status','products_interest','assigned_staff','quotation_no','invoice_no','notes'];
           const sets = [], vals = [];
           for (const f of FIELDS) {
             if (body[f] !== undefined) {
               sets.push(`${f}=?`);
               vals.push(f === 'assigned_staff' ? (body[f] || null) : body[f]);
             }
+          }
+          // Multi-purpose edit: store JSON + recompute team flags.
+          if (body.purposes !== undefined) {
+            const arr = Array.isArray(body.purposes) ? body.purposes : [];
+            const { needs_pos, needs_cs } = teamsForPurposes(arr);
+            sets.push('purposes=?');  vals.push(arr.length ? JSON.stringify(arr) : null);
+            sets.push('needs_pos=?'); vals.push(needs_pos);
+            sets.push('needs_cs=?');  vals.push(needs_cs);
           }
           if (!sets.length) return json({ success: true, changes: 0 });
           vals.push(leadId);

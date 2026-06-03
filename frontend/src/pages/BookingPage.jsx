@@ -5,6 +5,7 @@ import {
   CheckCircle, MapPin, Copy, Check, Navigation,
   MessageCircle, ChevronDown, ArrowRight,
 } from 'lucide-react';
+import { PURPOSES, purposeLabel } from '../purposes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -31,7 +32,8 @@ const LANG = {
     monFri: 'Mon – Fri', sat: 'Saturday', sun: 'Sunday',
     closed: 'Closed', copyAddr: 'Copy Address', copied: 'Copied!',
     openMaps: 'Open in Maps',
-    purposes: ['POS System', 'Hardware Devices (Sunmi)', 'Technical Support', 'LED Board', 'Pager System', 'Queue System', 'Calling System', 'Others'],
+    selDateFirst: 'Pick a date first', selPurposeFirst: 'Select a purpose first',
+    pickPurpose: 'Select one or more services',
   },
   my: {
     label: 'MY', flag: '🇲🇾',
@@ -54,7 +56,8 @@ const LANG = {
     monFri: 'Isnin – Jumaat', sat: 'Sabtu', sun: 'Ahad',
     closed: 'Tutup', copyAddr: 'Salin Alamat', copied: 'Disalin!',
     openMaps: 'Buka dalam Peta',
-    purposes: ['Sistem POS', 'Perkakasan (Sunmi)', 'Sokongan Teknikal', 'Papan LED', 'Sistem Pager', 'Sistem Giliran', 'Sistem Panggilan', 'Lain-lain'],
+    selDateFirst: 'Pilih tarikh dahulu', selPurposeFirst: 'Pilih tujuan dahulu',
+    pickPurpose: 'Pilih satu atau lebih perkhidmatan',
   },
   zh: {
     label: '中文', flag: '🇨🇳',
@@ -77,11 +80,12 @@ const LANG = {
     monFri: '周一 – 周五', sat: '周六', sun: '周日',
     closed: '休息', copyAddr: '复制地址', copied: '已复制！',
     openMaps: '打开地图',
-    purposes: ['POS 收银系统', '硬件设备 (Sunmi)', '技术支持', 'LED 显示板', '呼叫器系统', '排队管理系统', '叫号系统', '其他'],
+    selDateFirst: '请先选择日期', selPurposeFirst: '请先选择目的',
+    pickPurpose: '选择一项或多项服务',
   },
 };
 
-const SLOTS = ['10:00 AM','10:30 AM','11:00 AM','11:30 AM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM'];
+// Canonical purposes shared with the admin (keys + labels + department).
 const ADDRESS = '29, Jalan 2, Taman Len Seng Cheras,\n56000 Kuala Lumpur,\nWilayah Persekutuan Kuala Lumpur';
 const MAPS_URL = 'https://www.google.com/maps/search/?api=1&query=Mipos+Shoptech+Centre+29+Jalan+2+Taman+Len+Seng+Cheras+56000+Kuala+Lumpur';
 const MAPS_EMBED = 'https://maps.google.com/maps?q=Mipos+Shoptech+Centre,+29+Jalan+2,+Taman+Len+Seng,+56000+Cheras,+Kuala+Lumpur&output=embed&z=16';
@@ -104,44 +108,65 @@ function Field({ label, icon: Icon, children }) {
 /* ── Main Component ───────────────────────────────────────────────────────── */
 export default function BookingPage() {
   const [lang, setLang]     = useState('en');
-  const [form, setForm]     = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: '' });
+  const [form, setForm]     = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purposes: [] });
   const [done, setDone]     = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState('');
   const [copied, setCopied] = useState(false);
-  const [bookedSlots, setBookedSlots] = useState([]);
+  const [slotsData, setSlotsData] = useState([]); // [{time,pos_capacity,cs_capacity,pos_booked,cs_booked}]
   const t = LANG[lang];
 
   const set = e => setForm({ ...form, [e.target.name]: e.target.value });
 
-  // Fetch which slots are already booked whenever the date changes, and clear
-  // the chosen slot if it just became unavailable.
+  // Which teams the current purpose selection needs, and whether a slot is full
+  // for those teams. POS team = 'pos'; everything else = CS team.
+  const needsPos = form.purposes.includes('pos');
+  const needsCs  = form.purposes.some(k => k !== 'pos');
+  const slotFull = s =>
+    (needsPos && s.pos_booked >= s.pos_capacity) ||
+    (needsCs  && s.cs_booked  >= s.cs_capacity);
+
+  const togglePurpose = key => setForm(f => ({
+    ...f,
+    purposes: f.purposes.includes(key) ? f.purposes.filter(k => k !== key) : [...f.purposes, key],
+  }));
+
+  const purposeText = () => form.purposes.map(k => purposeLabel(k, lang)).join(', ');
+
+  // Per-team availability for the chosen date.
   const loadAvailability = async date => {
-    if (!date) { setBookedSlots([]); return []; }
+    if (!date) { setSlotsData([]); return; }
     try {
       const res = await axios.get(`${API_URL}/availability`, { params: { date } });
-      const booked = res.data?.booked || [];
-      setBookedSlots(booked);
-      setForm(f => (booked.includes(f.time_slot) ? { ...f, time_slot: '' } : f));
-      return booked;
-    } catch {
-      setBookedSlots([]);
-      return [];
-    }
+      setSlotsData(res.data?.slots || []);
+    } catch { setSlotsData([]); }
   };
 
   useEffect(() => { loadAvailability(form.date); /* eslint-disable-next-line */ }, [form.date]);
 
+  // Clear the chosen slot if it became unavailable for the selected teams.
+  useEffect(() => {
+    if (!form.time_slot) return;
+    const s = slotsData.find(x => x.time === form.time_slot);
+    if (!s || slotFull(s)) setForm(f => ({ ...f, time_slot: '' }));
+    /* eslint-disable-next-line */
+  }, [slotsData, form.purposes]);
+
   const submit = async e => {
     e.preventDefault();
+    if (!form.purposes.length) { setError(t.selPurposeFirst); return; }
     setLoading(true); setError('');
     try {
-      await axios.post(`${API_URL}/leads`, form);
+      await axios.post(`${API_URL}/leads`, {
+        name: form.name, phone: form.phone, company: form.company,
+        date: form.date, time_slot: form.time_slot,
+        purposes: form.purposes, purpose: purposeText(),
+      });
       setDone(true);
     } catch (err) {
       if (err?.response?.status === 409) {
         setError(t.slotTaken);
-        loadAvailability(form.date); // refresh so the taken slot shows as booked
+        loadAvailability(form.date); // refresh so taken slots show as full
       } else {
         setError('Failed to submit. Please try again.');
       }
@@ -150,7 +175,7 @@ export default function BookingPage() {
 
   const reset = () => {
     setDone(false);
-    setForm({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: '' });
+    setForm({ name: '', phone: '', company: '', date: '', time_slot: '', purposes: [] });
   };
 
   const copy = () => {
@@ -171,10 +196,10 @@ export default function BookingPage() {
           <p style={{ color: '#718096', marginBottom: 4 }}>
             {t.successSub} <strong style={{ color: '#ff6500' }}>{form.date}</strong> {t.successAt} <strong style={{ color: '#ff6500' }}>{form.time_slot}</strong>
           </p>
-          <p style={{ color: '#a0aec0', fontSize: '.875rem', marginBottom: 32 }}>{form.purpose}</p>
+          <p style={{ color: '#a0aec0', fontSize: '.875rem', marginBottom: 32 }}>{purposeText()}</p>
 
           <a
-            href={`https://wa.me/60103167320?text=${encodeURIComponent(`Hi MIPOS! I've booked a walk-in appointment for ${form.date} at ${form.time_slot}. Purpose: ${form.purpose}`)}`}
+            href={`https://wa.me/60103167320?text=${encodeURIComponent(`Hi MIPOS! I've booked a walk-in appointment for ${form.date} at ${form.time_slot}. Purpose: ${purposeText()}`)}`}
             target="_blank" rel="noreferrer"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px 24px', background: '#25D366', color: '#fff', fontWeight: 700, borderRadius: 8, textDecoration: 'none', marginBottom: 12, fontSize: '.9rem' }}
           >
@@ -221,10 +246,10 @@ export default function BookingPage() {
 
       {/* Main content */}
       <div style={{ background: 'var(--color-bg-soft)', padding: '0 16px 60px', marginTop: -1 }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', gap: 24, paddingTop: 40, flexWrap: 'wrap' }}>
+        <div className="booking-grid">
 
           {/* Booking form */}
-          <div className="card fade-up" style={{ flex: '1 1 560px', overflow: 'hidden' }}>
+          <div className="card fade-up" style={{ overflow: 'hidden', minWidth: 0 }}>
             {/* Card header */}
             <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafbfc' }}>
               <span style={{ fontSize: '.8rem', fontWeight: 700, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '.08em' }}>Appointment Details</span>
@@ -267,29 +292,51 @@ export default function BookingPage() {
                   <input className="field-input" type="text" name="company" placeholder="Your Company Name" value={form.company} onChange={set} />
                 </Field>
 
+                {/* Purpose — multi-select chips (drives which team & slots apply) */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.75rem', fontWeight: 600, color: '#4a5568', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                    {t.purpose} *
+                  </label>
+                  <p style={{ fontSize: '.72rem', color: '#a0aec0', margin: '0 0 9px' }}>{t.pickPurpose}</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {PURPOSES.map(p => {
+                      const on = form.purposes.includes(p.key);
+                      return (
+                        <button type="button" key={p.key} onClick={() => togglePurpose(p.key)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '8px 13px', borderRadius: 8, cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)', fontSize: '.8rem', fontWeight: 600,
+                            border: on ? '1.5px solid #ff6500' : '1.5px solid var(--color-border)',
+                            background: on ? 'rgba(255,101,0,.08)' : '#fff',
+                            color: on ? '#ff6500' : '#4a5568', transition: 'all .15s',
+                          }}>
+                          {on ? <Check size={13} /> : <Tag size={13} style={{ opacity: .55 }} />}
+                          {p[lang]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Date + Time (slots reflect the selected team's availability) */}
                 <div className="form-grid-2">
                   <Field label={t.date} icon={Calendar}>
                     <input className="field-input" type="date" name="date" required min={new Date().toISOString().split('T')[0]} value={form.date} onChange={set} onClick={(e) => { try { e.target.showPicker() } catch {} }} />
                   </Field>
                   <Field label={t.time} icon={Clock}>
-                    <select className="field-input" name="time_slot" required value={form.time_slot} onChange={set} style={{ appearance: 'none', cursor: 'pointer', paddingRight: 32 }}>
-                      <option value="">{t.selTime}</option>
-                      {SLOTS.map(s => {
-                        const taken = bookedSlots.includes(s);
-                        return <option key={s} value={s} disabled={taken}>{taken ? `${s} — ${t.booked}` : s}</option>;
+                    <select className="field-input" name="time_slot" required value={form.time_slot} onChange={set}
+                      disabled={!form.date || !form.purposes.length}
+                      style={{ appearance: 'none', cursor: 'pointer', paddingRight: 32, opacity: (!form.date || !form.purposes.length) ? .6 : 1 }}>
+                      <option value="">{!form.date ? t.selDateFirst : (!form.purposes.length ? t.selPurposeFirst : t.selTime)}</option>
+                      {form.date && form.purposes.length > 0 && slotsData.map(s => {
+                        const full = slotFull(s);
+                        return <option key={s.time} value={s.time} disabled={full}>{full ? `${s.time} — ${t.booked}` : s.time}</option>;
                       })}
                     </select>
                     <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#a0aec0', pointerEvents: 'none' }} />
                   </Field>
                 </div>
-
-                <Field label={t.purpose} icon={Tag}>
-                  <select className="field-input" name="purpose" required value={form.purpose} onChange={set} style={{ appearance: 'none', cursor: 'pointer', paddingRight: 32 }}>
-                    <option value="">{t.selPurpose}</option>
-                    {t.purposes.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#a0aec0', pointerEvents: 'none' }} />
-                </Field>
 
                 <button type="submit" disabled={loading} className="btn-brand"
                   style={{ width: '100%', padding: '13px 24px', fontSize: '.95rem', marginTop: 4, opacity: loading ? .7 : 1 }}>
@@ -303,7 +350,7 @@ export default function BookingPage() {
           </div>
 
           {/* Info sidebar */}
-          <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
             {/* Location */}
             <div className="card fade-up delay-1">

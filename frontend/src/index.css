@@ -111,6 +111,22 @@ body {
   background: rgba(255,101,0,.04);
 }
 
+/* ─── Booking page layout ────────────────────────────────────────────────── */
+/* Form + info sidebar: two columns on desktop, stacked full-width on tablet/
+   mobile so the cards always line up (no orphaned narrow sidebar). */
+.booking-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-top: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .booking-grid { grid-template-columns: 1fr; }
+}
+
 /* ─── Responsive form grid ───────────────────────────────────────────────── */
 /* Two-up fields (Name/Phone, Date/Time) collapse to one column on phones so
    inputs stay wide enough to show their text instead of truncating. */
