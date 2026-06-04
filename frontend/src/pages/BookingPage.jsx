@@ -239,16 +239,6 @@ export default function BookingPage() {
           <p style={{ color: 'rgba(255,255,255,.6)', fontSize: '1rem', maxWidth: 500, margin: '0 auto' }}>{t.sub}</p>
         </div>
 
-        {/* Falling Products Animation */}
-        <div className="falling-container">
-          <div className="falling-item"><img src="/products/pos_4k.png" alt="POS" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/queue_4k.png" alt="Queue" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/pos_4k.png" alt="POS" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/queue_4k.png" alt="Queue" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/pos_4k.png" alt="POS" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/queue_4k.png" alt="Queue" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-          <div className="falling-item"><img src="/products/pos_4k.png" alt="POS" style={{ filter: 'drop-shadow(0px 20px 30px rgba(0,0,0,0.7))' }} /></div>
-        </div>
       </div>
 
       {/* Main content */}
