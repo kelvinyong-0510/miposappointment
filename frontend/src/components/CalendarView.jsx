@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, X, MessageCircle, Edit2, Plus, Trash2 } from 'lucide-react';
 import { normalizePhone } from '../phone';
+import NewAppointmentModal from './NewAppointmentModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -53,10 +54,9 @@ export default function CalendarView() {
   const [dragLead,    setDragLead]    = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
 
-  /* Add modal */
-  const [showAdd,  setShowAdd]  = useState(false);
-  const [addForm,  setAddForm]  = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: 'POS System', stage: 'New Lead', status: '' });
-  const [addSaving, setAddSaving] = useState(false);
+  /* Add modal (uses the shared NewAppointmentModal for correct slots + sync) */
+  const [showAdd, setShowAdd] = useState(false);
+  const [addDate, setAddDate] = useState('');
 
   /* Edit modal */
   const [editLead, setEditLead] = useState(null);
@@ -113,22 +113,6 @@ export default function CalendarView() {
   const goToday    = () => { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(todayStr); };
 
   const dayLeads = selectedDay ? (leadsByDate[selectedDay] || []).slice().sort((a,b) => (a.time_slot||'').localeCompare(b.time_slot||'')) : [];
-
-  /* ── Add appointment ── */
-  const submitAdd = async (e) => {
-    e.preventDefault();
-    setAddSaving(true);
-    try {
-      await fetch(`${API_URL}/leads`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addForm),
-      });
-      setShowAdd(false);
-      setAddForm({ name: '', phone: '', company: '', date: '', time_slot: '', purpose: 'POS System', stage: 'New Lead', status: '' });
-      fetchLeads();
-    } catch(e){ console.error(e); }
-    finally { setAddSaving(false); }
-  };
 
   /* ── Edit appointment ── */
   const openEdit = (lead) => {
@@ -210,7 +194,7 @@ export default function CalendarView() {
           {/* Right: Today + Add */}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <button onClick={goToday} style={{ padding:'6px 16px', borderRadius:8, border:'none', background:'#111827', color:'#fff', fontWeight:700, fontSize:'.8rem', cursor:'pointer' }}>Today</button>
-            <button onClick={() => setShowAdd(true)} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:700, fontSize:'.8rem', cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+            <button onClick={() => { setAddDate(''); setShowAdd(true); }} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:700, fontSize:'.8rem', cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
               <Plus size={12} /> Add
             </button>
           </div>
@@ -405,7 +389,7 @@ export default function CalendarView() {
 
             {/* Add from panel */}
             <div style={{ padding:'12px 16px', borderTop:'1px solid #f3f4f6', flexShrink:0 }}>
-              <button onClick={() => { setAddForm(f => ({ ...f, date: selectedDay })); setShowAdd(true); }}
+              <button onClick={() => { setAddDate(selectedDay); setShowAdd(true); }}
                 style={{ width:'100%', padding:'9px', borderRadius:8, border:'1px dashed #ff6500', background:'#fff7ed', color:'#ff6500', fontWeight:700, fontSize:'.8rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
                 <Plus size={13} /> Add Appointment for this day
               </button>
@@ -414,61 +398,13 @@ export default function CalendarView() {
         )}
       </div>
 
-      {/* ══════════════════════════════════════════
-          ADD APPOINTMENT MODAL
-      ══════════════════════════════════════════ */}
+      {/* Add appointment — shared modal (slot dropdown + multi-purpose + sync) */}
       {showAdd && (
-        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div onClick={() => setShowAdd(false)} style={{ position:'absolute', inset:0, background:'rgba(17,24,39,.45)', backdropFilter:'blur(2px)' }} />
-          <div style={{ position:'relative', background:'#fff', borderRadius:16, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 20px 60px rgba(0,0,0,.18)', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-            <div style={{ padding:'18px 22px 14px', borderBottom:'1px solid #f3f4f6', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <h3 style={{ fontWeight:800, fontSize:'1rem', color:'#111827', margin:0 }}>Add Appointment</h3>
-              <button onClick={() => setShowAdd(false)} style={{ width:28, height:28, borderRadius:'50%', border:'1px solid #e5e7eb', background:'#f9fafb', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#6b7280' }}><X size={14}/></button>
-            </div>
-            <form onSubmit={submitAdd} style={{ padding:'18px 22px', overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:14 }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-                <div style={{ gridColumn:'span 2' }}>
-                  <FL>Customer Name *</FL>
-                  <input required style={inp()} value={addForm.name} onChange={e => setAddForm(p=>({...p,name:e.target.value}))} placeholder="Full Name" />
-                </div>
-                <div>
-                  <FL>Phone *</FL>
-                  <input required style={inp()} value={addForm.phone} onChange={e => setAddForm(p=>({...p,phone:e.target.value}))} onBlur={e => setAddForm(p=>({...p,phone:normalizePhone(e.target.value)}))} placeholder="012-3456789" />
-                </div>
-                <div>
-                  <FL>Company / Industry</FL>
-                  <input style={inp()} value={addForm.company} onChange={e => setAddForm(p=>({...p,company:e.target.value}))} placeholder="e.g. F&B" />
-                </div>
-                <div>
-                  <FL>Date *</FL>
-                  <input required type="date" style={inp()} value={addForm.date} onChange={e => setAddForm(p=>({...p,date:e.target.value}))} />
-                </div>
-                <div>
-                  <FL>Time Slot</FL>
-                  <input style={inp()} value={addForm.time_slot} onChange={e => setAddForm(p=>({...p,time_slot:e.target.value}))} placeholder="e.g. 10:00 AM" />
-                </div>
-                <div>
-                  <FL>Purpose</FL>
-                  <select style={sel()} value={addForm.purpose} onChange={e => setAddForm(p=>({...p,purpose:e.target.value}))}>
-                    {PURPOSE_LIST.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <FL>Stage</FL>
-                  <select style={sel()} value={addForm.stage} onChange={e => setAddForm(p=>({...p,stage:e.target.value}))}>
-                    {STAGE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, paddingTop:4 }}>
-                <button type="button" onClick={() => setShowAdd(false)} style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#374151', fontWeight:700, fontSize:'.85rem', cursor:'pointer' }}>Cancel</button>
-                <button type="submit" disabled={addSaving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#ff6500', color:'#fff', fontWeight:800, fontSize:'.85rem', cursor:'pointer', opacity:addSaving?.7:1 }}>
-                  {addSaving ? 'Saving…' : 'Save Appointment'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <NewAppointmentModal
+          defaultDate={addDate}
+          onClose={() => setShowAdd(false)}
+          onCreated={() => fetchLeads(true)}
+        />
       )}
 
       {/* ══════════════════════════════════════════

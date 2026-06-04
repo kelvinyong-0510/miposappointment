@@ -8,8 +8,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 const inp = { width: '100%', boxSizing: 'border-box', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', fontSize: '.88rem', fontFamily: 'var(--font-sans)', outline: 'none', background: '#f9fafb', color: '#111827' };
 const FL = ({ children }) => <label style={{ display: 'block', fontSize: '.72rem', fontWeight: 700, color: '#374151', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' }}>{children}</label>;
 
-export default function NewAppointmentModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', phone: '', company: '', date: '', time_slot: '', purposes: [] });
+export default function NewAppointmentModal({ onClose, onCreated, defaultDate = '' }) {
+  const [form, setForm] = useState({ name: '', phone: '', company: '', date: defaultDate, time_slot: '', purposes: [] });
   const [slotsData, setSlotsData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
