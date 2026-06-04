@@ -4,39 +4,47 @@ import { Clock, Plus, Trash2, Check, X, Save } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Display Mon-first; value is JS day-of-week (0=Sun … 6=Sat).
+const DAYS = [
+  { v: 1, label: 'Mon' }, { v: 2, label: 'Tue' }, { v: 3, label: 'Wed' },
+  { v: 4, label: 'Thu' }, { v: 5, label: 'Fri' }, { v: 6, label: 'Sat' }, { v: 0, label: 'Sun' },
+];
+const DAY_FULL = { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' };
+
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,.05)' };
 const inp = { border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: '.85rem', fontFamily: 'var(--font-sans)', outline: 'none', background: '#f9fafb', color: '#111827' };
 
 export default function SlotManager() {
+  const [day, setDay]       = useState(1); // Monday default
   const [slots, setSlots]   = useState([]);
   const [loading, setLoad]  = useState(true);
-  const [draft, setDraft]   = useState({});          // per-time edited {pos,cs}
+  const [draft, setDraft]   = useState({});
   const [adding, setAdding] = useState({ time: '', pos_capacity: 1, cs_capacity: 2 });
   const [busy, setBusy]     = useState(false);
   const [err, setErr]       = useState('');
 
-  const load = () => {
+  const load = (d = day) => {
     setLoad(true);
-    axios.get(`${API_URL}/slots`)
+    axios.get(`${API_URL}/slots`, { params: { day: d } })
       .then(r => setSlots(Array.isArray(r.data) ? r.data : []))
       .catch(() => setSlots([]))
       .finally(() => setLoad(false));
   };
-  useEffect(load, []);
+  useEffect(() => { setDraft({}); load(day); /* eslint-disable-next-line */ }, [day]);
 
   const toggleActive = async (s) => {
-    await axios.put(`${API_URL}/slots/${encodeURIComponent(s.time)}`, { active: s.active ? 0 : 1 });
+    await axios.put(`${API_URL}/slots/${day}/${encodeURIComponent(s.time)}`, { active: s.active ? 0 : 1 });
     load();
   };
   const saveCap = async (time) => {
     const d = draft[time]; if (!d) return;
-    await axios.put(`${API_URL}/slots/${encodeURIComponent(time)}`, { pos_capacity: Number(d.pos), cs_capacity: Number(d.cs) });
+    await axios.put(`${API_URL}/slots/${day}/${encodeURIComponent(time)}`, { pos_capacity: Number(d.pos), cs_capacity: Number(d.cs) });
     setDraft(p => { const n = { ...p }; delete n[time]; return n; });
     load();
   };
   const removeSlot = async (time) => {
-    if (!window.confirm(`Remove the ${time} slot? Existing bookings keep their time but the slot won't be offered to new customers.`)) return;
-    await axios.delete(`${API_URL}/slots/${encodeURIComponent(time)}`);
+    if (!window.confirm(`Remove the ${time} slot on ${DAY_FULL[day]}? New customers won't be offered it.`)) return;
+    await axios.delete(`${API_URL}/slots/${day}/${encodeURIComponent(time)}`);
     load();
   };
   const addSlot = async () => {
@@ -45,7 +53,7 @@ export default function SlotManager() {
     if (!/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(t)) { setErr('Enter time like "10:00 AM" or "2:30 PM".'); return; }
     setBusy(true);
     try {
-      await axios.post(`${API_URL}/slots`, { time: t.toUpperCase().replace(/\s+/, ' '), pos_capacity: Number(adding.pos_capacity), cs_capacity: Number(adding.cs_capacity) });
+      await axios.post(`${API_URL}/slots`, { day_of_week: day, time: t.toUpperCase().replace(/\s+/, ' '), pos_capacity: Number(adding.pos_capacity), cs_capacity: Number(adding.cs_capacity) });
       setAdding({ time: '', pos_capacity: 1, cs_capacity: 2 });
       load();
     } catch (e) { setErr(e?.response?.data?.error || 'Failed to add slot.'); }
@@ -62,18 +70,31 @@ export default function SlotManager() {
 
   return (
     <div style={{ padding: 20, maxWidth: 920, margin: '0 auto' }}>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 14 }}>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a202c', letterSpacing: '-.02em', margin: 0 }}>Time Slots</h2>
         <p style={{ color: '#6b7280', fontSize: '.85rem', margin: '4px 0 0' }}>
-          Set how many <strong style={{ color: '#ff6500' }}>POS</strong> and <strong style={{ color: '#0ea5e9' }}>CS</strong> appointments each slot can take. Disable a slot to stop offering it without deleting it.
+          Pick a day, then set its slots and how many <strong style={{ color: '#ff6500' }}>POS</strong> / <strong style={{ color: '#0ea5e9' }}>CS</strong> appointments each can take. This is a weekly schedule — it repeats every {DAY_FULL[day]}.
         </p>
+      </div>
+
+      {/* Day selector */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {DAYS.map(d => {
+          const on = day === d.v;
+          return (
+            <button key={d.v} onClick={() => setDay(d.v)} style={{
+              padding: '9px 18px', borderRadius: 99, cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '.82rem', fontWeight: 700,
+              border: on ? '1.5px solid #ff6500' : '1.5px solid #e5e7eb', background: on ? '#ff6500' : '#fff', color: on ? '#fff' : '#4a5568', transition: 'all .15s',
+            }}>{d.label}</button>
+          );
+        })}
       </div>
 
       {/* Add new slot */}
       <div style={{ ...card, padding: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '.7rem', fontWeight: 700, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>New slot time</label>
-          <input style={{ ...inp, width: 150 }} placeholder="e.g. 5:00 PM" value={adding.time} onChange={e => setAdding(a => ({ ...a, time: e.target.value }))} />
+          <label style={{ display: 'block', fontSize: '.7rem', fontWeight: 700, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>New slot ({DAY_FULL[day]})</label>
+          <input style={{ ...inp, width: 150 }} placeholder="e.g. 9:30 AM" value={adding.time} onChange={e => setAdding(a => ({ ...a, time: e.target.value }))} />
         </div>
         <div>
           <label style={{ display: 'block', fontSize: '.7rem', fontWeight: 700, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>POS cap</label>
@@ -103,7 +124,9 @@ export default function SlotManager() {
             {loading ? (
               <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Loading…</td></tr>
             ) : slots.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>No slots configured. Add one above.</td></tr>
+              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>
+                Closed on {DAY_FULL[day]} — no slots. Add one above to open this day for bookings.
+              </td></tr>
             ) : slots.map(s => {
               const d = draft[s.time] || { pos: s.pos_capacity, cs: s.cs_capacity };
               const dirty = draft[s.time] && (Number(d.pos) !== s.pos_capacity || Number(d.cs) !== s.cs_capacity);

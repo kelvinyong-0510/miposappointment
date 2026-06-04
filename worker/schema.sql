@@ -34,21 +34,36 @@ CREATE TABLE IF NOT EXISTS leads (
     created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Master slot configuration (per-team capacity, enable/disable)
+-- Per-day-of-week slot configuration (per-team capacity, enable/disable).
+-- day_of_week: 0=Sun … 6=Sat. Hours: Mon–Fri 9:30–4:30 (lunch 12–2 excluded),
+-- Sat 10:00–12:30, Sun closed.
 CREATE TABLE IF NOT EXISTS slots (
-    time         TEXT    PRIMARY KEY,        -- "10:00 AM"
+    day_of_week  INTEGER NOT NULL,           -- 0=Sun … 6=Sat
+    time         TEXT    NOT NULL,           -- "10:00 AM"
     sort_order   INTEGER NOT NULL,           -- HHMM 24h, for ordering
     pos_capacity INTEGER NOT NULL DEFAULT 1, -- POS team seats per slot
     cs_capacity  INTEGER NOT NULL DEFAULT 2, -- CS team seats per slot
-    active       INTEGER NOT NULL DEFAULT 1
+    active       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (day_of_week, time)
 );
 
-INSERT OR IGNORE INTO slots (time, sort_order, pos_capacity, cs_capacity, active) VALUES
- ('10:00 AM', 1000, 1, 2, 1), ('10:30 AM', 1030, 1, 2, 1),
- ('11:00 AM', 1100, 1, 2, 1), ('11:30 AM', 1130, 1, 2, 1),
- ('2:00 PM',  1400, 1, 2, 1), ('2:30 PM',  1430, 1, 2, 1),
- ('3:00 PM',  1500, 1, 2, 1), ('3:30 PM',  1530, 1, 2, 1),
- ('4:00 PM',  1600, 1, 2, 1), ('4:30 PM',  1630, 1, 2, 1);
+-- Mon–Fri (1–5): 10:00–11:30 and 2:00–4:30.
+INSERT OR IGNORE INTO slots (day_of_week, time, sort_order, pos_capacity, cs_capacity, active)
+  SELECT d.day, t.time, t.sort_order, 1, 2, 1
+  FROM (SELECT 1 AS day UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) d
+  JOIN (
+    SELECT '10:00 AM' time, 1000 sort_order UNION ALL SELECT '10:30 AM',1030 UNION ALL
+    SELECT '11:00 AM',1100 UNION ALL SELECT '11:30 AM',1130 UNION ALL
+    SELECT '2:00 PM',1400 UNION ALL SELECT '2:30 PM',1430 UNION ALL
+    SELECT '3:00 PM',1500 UNION ALL SELECT '3:30 PM',1530 UNION ALL
+    SELECT '4:00 PM',1600 UNION ALL SELECT '4:30 PM',1630
+  ) t;
+
+-- Saturday (6): 10:00–12:30.
+INSERT OR IGNORE INTO slots (day_of_week, time, sort_order, pos_capacity, cs_capacity, active) VALUES
+ (6,'10:00 AM',1000,1,2,1),(6,'10:30 AM',1030,1,2,1),(6,'11:00 AM',1100,1,2,1),
+ (6,'11:30 AM',1130,1,2,1),(6,'12:00 PM',1200,1,2,1);
+-- Sunday (0): no slots.
 
 CREATE TABLE IF NOT EXISTS sales (
     id             INTEGER  PRIMARY KEY AUTOINCREMENT,

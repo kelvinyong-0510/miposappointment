@@ -35,6 +35,7 @@ const LANG = {
     openMaps: 'Open in Maps',
     selDateFirst: 'Pick a date first', selPurposeFirst: 'Select a purpose first',
     pickPurpose: 'Select one or more services',
+    closedDay: "Sorry, we're closed on this day. Please choose another date.",
   },
   my: {
     label: 'MY', flag: '🇲🇾',
@@ -59,6 +60,7 @@ const LANG = {
     openMaps: 'Buka dalam Peta',
     selDateFirst: 'Pilih tarikh dahulu', selPurposeFirst: 'Pilih tujuan dahulu',
     pickPurpose: 'Pilih satu atau lebih perkhidmatan',
+    closedDay: 'Maaf, kami tutup pada hari ini. Sila pilih tarikh lain.',
   },
   zh: {
     label: '中文', flag: '🇨🇳',
@@ -83,6 +85,7 @@ const LANG = {
     openMaps: '打开地图',
     selDateFirst: '请先选择日期', selPurposeFirst: '请先选择目的',
     pickPurpose: '选择一项或多项服务',
+    closedDay: '抱歉，我们当天休息。请选择其他日期。',
   },
 };
 
@@ -115,6 +118,7 @@ export default function BookingPage() {
   const [error, setError]   = useState('');
   const [copied, setCopied] = useState(false);
   const [slotsData, setSlotsData] = useState([]); // [{time,pos_capacity,cs_capacity,pos_booked,cs_booked}]
+  const [closedDay, setClosedDay] = useState(false);
   const t = LANG[lang];
 
   const set = e => setForm({ ...form, [e.target.name]: e.target.value });
@@ -136,11 +140,13 @@ export default function BookingPage() {
 
   // Per-team availability for the chosen date.
   const loadAvailability = async date => {
-    if (!date) { setSlotsData([]); return; }
+    if (!date) { setSlotsData([]); setClosedDay(false); return; }
     try {
       const res = await axios.get(`${API_URL}/availability`, { params: { date } });
-      setSlotsData(res.data?.slots || []);
-    } catch { setSlotsData([]); }
+      const slots = res.data?.slots || [];
+      setSlotsData(slots);
+      setClosedDay(slots.length === 0);
+    } catch { setSlotsData([]); setClosedDay(false); }
   };
 
   useEffect(() => { loadAvailability(form.date); /* eslint-disable-next-line */ }, [form.date]);
@@ -339,8 +345,14 @@ export default function BookingPage() {
                   </Field>
                 </div>
 
-                <button type="submit" disabled={loading} className="btn-brand"
-                  style={{ width: '100%', padding: '13px 24px', fontSize: '.95rem', marginTop: 4, opacity: loading ? .7 : 1 }}>
+                {closedDay && form.date && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,.06)', border: '1.5px solid rgba(239,68,68,.2)', borderRadius: 8, color: '#dc2626', fontSize: '.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Clock size={15} /> {t.closedDay}
+                  </div>
+                )}
+
+                <button type="submit" disabled={loading || (closedDay && !!form.date)} className="btn-brand"
+                  style={{ width: '100%', padding: '13px 24px', fontSize: '.95rem', marginTop: 4, opacity: (loading || (closedDay && form.date)) ? .7 : 1 }}>
                   {loading
                     ? <><div className="spin" style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%' }} />{t.submitting}</>
                     : <>{t.submit} <ArrowRight size={16} /></>

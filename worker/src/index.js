@@ -44,6 +44,13 @@ function teamsForPurposes(purposes) {
   };
 }
 
+// "YYYY-MM-DD" → day of week (0=Sun … 6=Sat), TZ-independent. null if invalid.
+function dayOfWeek(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 // "10:00 AM" / "2:30 PM" → 1000 / 1430 (sortable 24h key). null if unparseable.
 function timeToSort(slot) {
   const m = String(slot || '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -456,24 +463,34 @@ export default {
         }
       }
 
-      // ── Slots (master config) ─────────────────────────────────────────────
+      // ── Slots (per-day-of-week config) ────────────────────────────────────
+      // day_of_week: 0=Sun … 6=Sat. GET ?day=N for one day, else all days.
       if (path === '/api/slots' && method === 'GET') {
-        const { results } = await env.DB.prepare('SELECT * FROM slots ORDER BY sort_order').all();
+        const day = url.searchParams.get('day');
+        if (day !== null && day !== '') {
+          const { results } = await env.DB.prepare(
+            'SELECT * FROM slots WHERE day_of_week=? ORDER BY sort_order'
+          ).bind(parseInt(day, 10)).all();
+          return json(results);
+        }
+        const { results } = await env.DB.prepare('SELECT * FROM slots ORDER BY day_of_week, sort_order').all();
         return json(results);
       }
       if (path === '/api/slots' && method === 'POST') {
-        const { time, pos_capacity, cs_capacity } = await request.json();
+        const { day_of_week, time, pos_capacity, cs_capacity } = await request.json();
         const so = timeToSort(time);
-        if (so === null) return json({ error: 'Invalid time. Use e.g. "10:00 AM" or "2:30 PM".' }, 400);
+        if (day_of_week === undefined || day_of_week === null || so === null)
+          return json({ error: 'day_of_week (0–6) and a valid time (e.g. "10:00 AM") are required.' }, 400);
         await env.DB.prepare(
-          `INSERT OR REPLACE INTO slots(time,sort_order,pos_capacity,cs_capacity,active)
-           VALUES(?,?,?,?,COALESCE((SELECT active FROM slots WHERE time=?),1))`
-        ).bind(time, so, pos_capacity ?? 1, cs_capacity ?? 2, time).run();
+          `INSERT OR REPLACE INTO slots(day_of_week,time,sort_order,pos_capacity,cs_capacity,active)
+           VALUES(?,?,?,?,?,COALESCE((SELECT active FROM slots WHERE day_of_week=? AND time=?),1))`
+        ).bind(day_of_week, time, so, pos_capacity ?? 1, cs_capacity ?? 2, day_of_week, time).run();
         return json({ success: true }, 201);
       }
-      const slotTime = path.match(/^\/api\/slots\/(.+)$/)?.[1];
-      if (slotTime) {
-        const time = decodeURIComponent(slotTime);
+      const slotMatch = path.match(/^\/api\/slots\/(\d)\/(.+)$/);
+      if (slotMatch) {
+        const day  = parseInt(slotMatch[1], 10);
+        const time = decodeURIComponent(slotMatch[2]);
         if (method === 'PUT') {
           const b = await request.json();
           const sets = [], vals = [];
@@ -481,24 +498,26 @@ export default {
           if (b.cs_capacity  !== undefined) { sets.push('cs_capacity=?');  vals.push(b.cs_capacity); }
           if (b.active       !== undefined) { sets.push('active=?');       vals.push(b.active ? 1 : 0); }
           if (!sets.length) return json({ success: true, changes: 0 });
-          vals.push(time);
-          const r = await env.DB.prepare(`UPDATE slots SET ${sets.join(',')} WHERE time=?`).bind(...vals).run();
+          vals.push(day, time);
+          const r = await env.DB.prepare(`UPDATE slots SET ${sets.join(',')} WHERE day_of_week=? AND time=?`).bind(...vals).run();
           return json({ success: true, changes: r.meta.changes });
         }
         if (method === 'DELETE') {
-          const r = await env.DB.prepare('DELETE FROM slots WHERE time=?').bind(time).run();
+          const r = await env.DB.prepare('DELETE FROM slots WHERE day_of_week=? AND time=?').bind(day, time).run();
           return r.meta.changes ? json({ success: true }) : json({ error: 'Slot not found' }, 404);
         }
       }
 
       // ── Availability ──────────────────────────────────────────────────────
-      // Per-slot, per-team booked counts + capacities for a date (active slots).
+      // Per-slot, per-team booked counts + capacities for a date (active slots
+      // for that date's day-of-week). Closed days return an empty slot list.
       if (path === '/api/availability' && method === 'GET') {
         const date = url.searchParams.get('date');
         if (!date) return json({ error: 'date query param required' }, 400);
+        const dow = dayOfWeek(date);
         const { results: slotRows } = await env.DB.prepare(
-          'SELECT time, pos_capacity, cs_capacity FROM slots WHERE active=1 ORDER BY sort_order'
-        ).all();
+          'SELECT time, pos_capacity, cs_capacity FROM slots WHERE day_of_week=? AND active=1 ORDER BY sort_order'
+        ).bind(dow).all();
         const { results: booked } = await env.DB.prepare(
           `SELECT time_slot,
                   COALESCE(SUM(needs_pos),0) AS pos,
@@ -516,7 +535,7 @@ export default {
           pos_booked: bmap[s.time]?.pos || 0,
           cs_booked: bmap[s.time]?.cs || 0,
         }));
-        return json({ date, slots });
+        return json({ date, day_of_week: dow, slots });
       }
 
       // ── Leads ─────────────────────────────────────────────────────────────
@@ -557,10 +576,10 @@ export default {
 
           let newId;
           if (date && time_slot) {
-            // Slot must exist and be active.
+            // Slot must exist and be active for this date's day-of-week.
             const slot = await env.DB.prepare(
-              'SELECT pos_capacity, cs_capacity, active FROM slots WHERE time=?'
-            ).bind(time_slot).first();
+              'SELECT pos_capacity, cs_capacity, active FROM slots WHERE day_of_week=? AND time=?'
+            ).bind(dayOfWeek(date), time_slot).first();
             if (!slot || !slot.active) {
               return json({ error: 'slot_unavailable', message: 'That time slot is not available.' }, 409);
             }
