@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">MIPOS Check-In</string>
-    <!-- The hosted kiosk web app. Change to https://checkin.mipos.me/ once DNS is set. -->
-    <string name="kiosk_url">https://mipos-checkin.pages.dev/</string>
+    <!-- The hosted kiosk web app (custom domain; falls back to the .pages.dev URL). -->
+    <string name="kiosk_url">https://checkin.mipos.me/</string>
 </resources>
