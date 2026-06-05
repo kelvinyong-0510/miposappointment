@@ -577,6 +577,32 @@ export default {
         return json({ name: lead.name, team, queue_number, time_slot: lead.time_slot, purpose: lead.purpose });
       }
 
+      // Walk-in: no appointment, served on the spot. No slot, no capacity check.
+      if (path === '/api/checkin/walkin' && method === 'POST') {
+        const body = await request.json();
+        if (!body.phone) return json({ error: 'phone required' }, 400);
+        const today = mytToday();
+        const purposesArr = Array.isArray(body.purposes) ? body.purposes : [];
+        const purposeStr  = purposesArr.length ? purposesArr.join(', ') : 'Walk-in';
+        const t = teamsForPurposes(purposesArr);
+        const needs_pos = t.needs_pos;
+        const needs_cs  = (t.needs_pos || t.needs_cs) ? t.needs_cs : 1; // default → CS team
+        const r = await env.DB.prepare(
+          `INSERT INTO leads(name,phone,company,date,time_slot,purpose,purposes,needs_pos,needs_cs,attendance,stage,source)
+           VALUES(?,?,?,?,?,?,?,?,?,'attended','Walk-In Arrived','kiosk')`
+        ).bind(
+          body.name ?? null, body.phone, null, today, null, purposeStr,
+          purposesArr.length ? JSON.stringify(purposesArr) : null, needs_pos, needs_cs
+        ).run();
+        const team = needs_pos ? 'POS' : 'CS';
+        const teamCol = needs_pos ? 'needs_pos' : 'needs_cs';
+        const row = await env.DB.prepare(
+          `SELECT COUNT(*) AS c FROM leads WHERE date=? AND attendance='attended' AND ${teamCol}=1`
+        ).bind(today).first();
+        const queue_number = `${team}-${String(row.c).padStart(2, '0')}`;
+        return json({ id: r.meta.last_row_id, name: body.name || 'Guest', team, queue_number }, 201);
+      }
+
       // ── Leads ─────────────────────────────────────────────────────────────
       const SEL = `SELECT leads.*,staff.name as assigned_staff_name
                    FROM leads LEFT JOIN staff ON leads.assigned_staff=staff.id`;
