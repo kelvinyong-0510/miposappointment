@@ -157,18 +157,17 @@ const errBox = (msg) => msg ? <p style={{ color: '#dc2626', fontSize: 20, fontWe
 /* ── Attract ── */
 function Attract({ t, onStart }) {
   return (
-    <div style={{ ...shell, background: NAVY, overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse 70% 60% at 50% 110%, rgba(255,101,0,.18), transparent)' }} />
-      <div className="falling-container">
-        {['pos_4k','queue_4k','pos_4k','queue_4k','pos_4k'].map((p, i) => (
-          <div className="falling-item" key={i}><img src={`/products/${p}.png`} alt="" style={{ filter: 'drop-shadow(0 20px 30px rgba(0,0,0,.7))' }} /></div>
-        ))}
-      </div>
-      <div style={{ position: 'relative', textAlign: 'center', maxWidth: 760 }}>
-        <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 56, marginBottom: 40, borderRadius: 8 }} />
-        <h1 style={{ fontSize: 'clamp(56px,9vw,96px)', fontWeight: 900, color: '#fff', lineHeight: 1.05, letterSpacing: '-.03em', margin: '0 0 20px' }}>{t.attractTitle}</h1>
-        <p style={{ fontSize: 28, color: 'rgba(255,255,255,.7)', margin: '0 0 56px', lineHeight: 1.4 }}>{t.attractSub}</p>
-        <button onClick={onStart} style={bigBtn({ maxWidth: 520, margin: '0 auto', minHeight: 120, fontSize: 34, boxShadow: '0 12px 40px rgba(255,101,0,.4)' })}>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: NAVY, overflow: 'hidden' }}>
+      {/* Showroom product photo (Sunmi range) — portrait crop keeps the products centered */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 38%' }} />
+      {/* Navy gradient: clear products up top, solid base for the headline + CTA */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.15) 30%, rgba(10,22,40,.80) 64%, rgba(10,22,40,.97) 100%)' }} />
+      {/* Content anchored in the lower third */}
+      <div style={{ position: 'relative', textAlign: 'center', maxWidth: 820, margin: '0 auto', padding: '0 40px 12vh' }}>
+        <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 60, marginBottom: 28, borderRadius: 8 }} />
+        <h1 style={{ fontSize: 'clamp(56px,9vw,96px)', fontWeight: 900, color: '#fff', lineHeight: 1.05, letterSpacing: '-.03em', margin: '0 0 18px', textShadow: '0 4px 30px rgba(0,0,0,.5)' }}>{t.attractTitle}</h1>
+        <p style={{ fontSize: 28, color: 'rgba(255,255,255,.82)', margin: '0 0 48px', lineHeight: 1.4 }}>{t.attractSub}</p>
+        <button onClick={onStart} style={bigBtn({ maxWidth: 560, margin: '0 auto', minHeight: 120, fontSize: 34, boxShadow: '0 12px 44px rgba(255,101,0,.5)' })}>
           {t.checkIn} <ArrowRight size={32} />
         </button>
       </div>
