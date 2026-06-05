@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   Phone, Delete, ArrowRight, ArrowLeft, CheckCircle2, Clock, Users, Tag, Check, X,
   Calendar, Footprints,
+  Monitor, Cpu, Wrench, Tv, BellRing, Ticket, PhoneCall, LayoutGrid,
 } from 'lucide-react';
 import { PURPOSES, purposeLabel, teamsForPurposes } from '../purposes';
 import { normalizePhone } from '../phone';
@@ -24,6 +25,8 @@ const T = {
     notMe: 'Not me / Walk in', welcome: 'Welcome', queue: 'Your number', seat: 'Please have a seat — we’ll call you shortly.',
     servedBy: 'You’ll be served by', done: 'Done', posTeam: 'POS Team', csTeam: 'Customer Success',
     walkTitle: 'Walk-in check-in', walkSub: 'We’ll serve you on the spot.', optional: '(optional)',
+    next: 'Next', phoneTitle: 'Contact number', phoneSub: 'So our team can reach you if needed.',
+    serviceSub: 'You may select more than one.', step: 'Step',
     name: 'Your name', phoneLabel: 'Phone number',
     purpose: 'What can we help with?', pickSlot: 'Pick a time today', noSlots: 'No slots left today — please see our staff.',
     register: 'Register & Check In', booking: 'Booking…', slotFull: 'That time is full — please pick another.',
@@ -42,6 +45,8 @@ const T = {
     notMe: 'Bukan saya / Walk in', welcome: 'Selamat datang', queue: 'Nombor anda', seat: 'Sila duduk — kami akan panggil anda sebentar lagi.',
     servedBy: 'Anda akan dilayan oleh', done: 'Selesai', posTeam: 'Pasukan POS', csTeam: 'Customer Success',
     walkTitle: 'Daftar walk-in', walkSub: 'Kami akan layan anda terus.', optional: '(pilihan)',
+    next: 'Seterusnya', phoneTitle: 'Nombor telefon', phoneSub: 'Supaya pasukan kami boleh hubungi anda jika perlu.',
+    serviceSub: 'Anda boleh pilih lebih daripada satu.', step: 'Langkah',
     name: 'Nama anda', phoneLabel: 'Nombor telefon',
     purpose: 'Apa yang boleh kami bantu?', pickSlot: 'Pilih masa hari ini', noSlots: 'Tiada slot hari ini — sila jumpa staf kami.',
     register: 'Daftar & Masuk', booking: 'Memproses…', slotFull: 'Masa itu penuh — sila pilih yang lain.',
@@ -60,6 +65,8 @@ const T = {
     notMe: '不是我 / 现场登记', welcome: '欢迎', queue: '您的号码', seat: '请就座，我们很快会叫您。',
     servedBy: '为您服务的团队', done: '完成', posTeam: 'POS 团队', csTeam: '客户成功团队',
     walkTitle: '现场登记', walkSub: '我们将立即为您服务。', optional: '（可选）',
+    next: '下一步', phoneTitle: '联络电话', phoneSub: '以便我们的团队在需要时联系您。',
+    serviceSub: '可选择多项。', step: '步骤',
     name: '您的姓名', phoneLabel: '电话号码',
     purpose: '需要什么帮助？', pickSlot: '选择今天的时间', noSlots: '今天没有空位，请联系我们的工作人员。',
     register: '登记并登到', booking: '处理中…', slotFull: '该时间已满，请选择其他时间。',
@@ -300,21 +307,27 @@ function Success({ t, lang, result, onDone }) {
   );
 }
 
-/* ── Walk-in (no slot — served on the spot) ── */
+/* ═══ Walk-in — 3-step guided check-in flow ═══════════════════════════════════
+   Step 1 Name → Step 2 Phone → Step 3 Services. Reuses POST /checkin/walkin. */
+const SERVICE_ICONS = {
+  pos: Monitor, hardware: Cpu, support: Wrench, led: Tv,
+  pager: BellRing, queue: Ticket, calling: PhoneCall, others: LayoutGrid,
+};
+
 function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
-  const [form, setForm] = useState({ name: '', phone: prefillPhone ? normalizePhone(prefillPhone) : '', purposes: [] });
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: '', phone: prefillPhone ? prefillPhone.replace(/\D/g, '') : '', purposes: [] });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const toggle = key => setForm(f => ({ ...f, purposes: f.purposes.includes(key) ? f.purposes.filter(k => k !== key) : [...f.purposes, key] }));
-
   const submit = async () => {
-    if (!form.name.trim()) return setErr(t.needName);
-    if (!form.phone.trim()) return setErr(t.needPhone);
     setBusy(true); setErr('');
+    const phoneNumber = normalizePhone(form.phone);
     try {
       const res = await axios.post(`${API_URL}/checkin/walkin`, {
-        name: form.name, phone: form.phone, purposes: form.purposes,
+        // user-facing payload shape + the keys the existing backend expects
+        name: form.name, phoneNumber, selectedServices: form.purposes,
+        phone: phoneNumber, purposes: form.purposes,
       });
       onDone(res.data);
     } catch {
@@ -322,33 +335,138 @@ function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
     } finally { setBusy(false); }
   };
 
+  const back = () => (step === 1 ? onBack() : setStep(s => s - 1));
+  const toggle = key => setForm(f => ({ ...f, purposes: f.purposes.includes(key) ? f.purposes.filter(k => k !== key) : [...f.purposes, key] }));
+
   return (
-    <div style={{ ...shell, justifyContent: 'flex-start', paddingTop: 88, overflowY: 'auto' }}>
-      <div style={{ width: '100%', maxWidth: 620 }}>
-        <h1 style={{ fontSize: 40, fontWeight: 800, color: '#1a202c', textAlign: 'center', margin: '0 0 8px' }}>{t.walkTitle}</h1>
-        <p style={{ fontSize: 22, color: '#718096', textAlign: 'center', margin: '0 0 28px' }}>{t.walkSub}</p>
-
-        <label style={lbl}>{t.name}</label>
-        <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={field} />
-        <label style={lbl}>{t.phoneLabel}</label>
-        <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} onBlur={e => setForm(f => ({ ...f, phone: normalizePhone(e.target.value) }))} inputMode="tel" style={field} />
-
-        <label style={lbl}>{t.purpose} <span style={{ fontWeight: 500, color: '#a0aec0' }}>{t.optional}</span></label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
-          {PURPOSES.map(p => {
-            const on = form.purposes.includes(p.key);
-            return <button key={p.key} onClick={() => toggle(p.key)} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 18px', borderRadius: 12, cursor: 'pointer', fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-sans)',
-              border: on ? `2px solid ${ORANGE}` : '2px solid #e2e8f0', background: on ? 'rgba(255,101,0,.08)' : '#fff', color: on ? ORANGE : '#4a5568',
-            }}>{on ? <Check size={18} /> : <Tag size={18} style={{ opacity: .5 }} />}{p[lang]}</button>;
-          })}
-        </div>
-
-        {errBox(err)}
-        <button onClick={submit} disabled={busy} style={bigBtn({ marginTop: 8, opacity: busy ? .6 : 1 })}>{busy ? t.booking : <>{t.register} <ArrowRight size={28} /></>}</button>
-        <button onClick={onBack} style={ghostBtn({ marginTop: 14, minHeight: 64, fontSize: 20, marginBottom: 40 })}><ArrowLeft size={22} /> {t.back}</button>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <StepProgress step={step} total={3} />
+      <div key={step} className="kiosk-step" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {step === 1 && (
+          <NameStep t={t} value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))}
+            onNext={() => setStep(2)} onBack={back} />
+        )}
+        {step === 2 && (
+          <PhoneStep t={t} digits={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))}
+            onNext={() => setStep(3)} onBack={back} />
+        )}
+        {step === 3 && (
+          <ServiceSelectionStep t={t} lang={lang} selected={form.purposes} onToggle={toggle}
+            onSubmit={submit} onBack={back} busy={busy} err={err} />
+        )}
       </div>
     </div>
+  );
+}
+
+/* Progress dots */
+function StepProgress({ step, total }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 92, paddingBottom: 6 }}>
+      {Array.from({ length: total }, (_, i) => i + 1).map(n => (
+        <div key={n} style={{ width: n === step ? 40 : 12, height: 12, borderRadius: 99, background: n <= step ? ORANGE : '#e2e8f0', transition: 'all .3s' }} />
+      ))}
+    </div>
+  );
+}
+
+/* Shared step layout: centered title/sub, flexible body, pinned footer + Back */
+function StepShell({ t, title, sub, children, footer, onBack }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '0 40px 36px', overflowY: 'auto' }}>
+      <div style={{ textAlign: 'center', paddingTop: 8, marginBottom: 28, flexShrink: 0 }}>
+        <h1 style={{ fontSize: 46, fontWeight: 800, color: '#1a202c', margin: '0 0 10px', letterSpacing: '-.02em' }}>{title}</h1>
+        <p style={{ fontSize: 24, color: '#718096', margin: 0 }}>{sub}</p>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>{children}</div>
+      <div style={{ flexShrink: 0, marginTop: 24, maxWidth: 680, width: '100%', marginLeft: 'auto', marginRight: 'auto' }}>
+        {footer}
+        <button onClick={onBack} style={ghostBtn({ marginTop: 14, minHeight: 66, fontSize: 21, border: 'none' })}><ArrowLeft size={22} /> {t.back}</button>
+      </div>
+    </div>
+  );
+}
+
+function PrimaryBtn({ disabled, onClick, children }) {
+  return <button onClick={onClick} disabled={disabled} style={bigBtn({ maxWidth: 680, margin: '0 auto', opacity: disabled ? .45 : 1 })}>{children}</button>;
+}
+
+/* Step 1 — Name */
+function NameStep({ t, value, onChange, onNext, onBack }) {
+  const ok = value.trim().length > 0;
+  return (
+    <StepShell t={t} title={t.walkTitle} sub={t.walkSub} onBack={onBack}
+      footer={<PrimaryBtn disabled={!ok} onClick={onNext}>{t.next} <ArrowRight size={28} /></PrimaryBtn>}>
+      <div style={{ width: '100%', maxWidth: 620, margin: '0 auto' }}>
+        <label style={lbl}>{t.name}</label>
+        <input autoFocus value={value} onChange={e => onChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && ok) onNext(); }}
+          style={{ ...field, marginBottom: 0, fontSize: 32, padding: '24px 22px' }} />
+      </div>
+    </StepShell>
+  );
+}
+
+/* Step 2 — Phone (numeric keypad) */
+function PhoneStep({ t, digits, onChange, onNext, onBack }) {
+  const d = String(digits || '').replace(/\D/g, '');
+  const press = k => onChange((d + k).slice(0, 11));
+  const del = () => onChange(d.slice(0, -1));
+  const ok = d.length >= 7;
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
+  return (
+    <StepShell t={t} title={t.phoneTitle} sub={t.phoneSub} onBack={onBack}
+      footer={<PrimaryBtn disabled={!ok} onClick={onNext}>{t.next} <ArrowRight size={28} /></PrimaryBtn>}>
+      <div style={{ width: '100%', maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#fff', border: '2px solid #e2e8f0', borderRadius: 16, padding: '20px 24px', marginBottom: 26 }}>
+          <Phone size={28} color="#a0aec0" />
+          <span style={{ fontSize: 40, fontWeight: 800, letterSpacing: '2px', color: d ? '#1a202c' : '#cbd5e0' }}>{d ? normalizePhone(d) : '0XX-XXXXXXX'}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+          {keys.map((k, i) => k === '' ? <div key={i} /> : (
+            <button key={i} onClick={() => k === 'del' ? del() : press(k)} style={{
+              minHeight: 92, borderRadius: 16, border: '2px solid #e2e8f0', background: '#fff', cursor: 'pointer',
+              fontSize: 34, fontWeight: 700, color: '#1a202c', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{k === 'del' ? <Delete size={32} color="#718096" /> : k}</button>
+          ))}
+        </div>
+      </div>
+    </StepShell>
+  );
+}
+
+/* Step 3 — Service selection (multi-select cards, optional) */
+function ServiceSelectionStep({ t, lang, selected, onToggle, onSubmit, onBack, busy, err }) {
+  return (
+    <StepShell t={t} title={t.purpose} sub={t.serviceSub} onBack={onBack}
+      footer={<>{errBox(err)}<PrimaryBtn disabled={busy} onClick={onSubmit}>{busy ? t.booking : <>{t.register} <ArrowRight size={28} /></>}</PrimaryBtn></>}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, width: '100%', maxWidth: 720, margin: '0 auto' }}>
+        {PURPOSES.map(p => (
+          <ServiceCard key={p.key} icon={SERVICE_ICONS[p.key] || Tag} label={p[lang]}
+            selected={selected.includes(p.key)} onClick={() => onToggle(p.key)} />
+        ))}
+      </div>
+    </StepShell>
+  );
+}
+
+function ServiceCard({ icon: Icon, label, selected, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14,
+      minHeight: 150, borderRadius: 18, cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: '22px 14px',
+      border: selected ? `3px solid ${ORANGE}` : '2px solid #e2e8f0',
+      background: selected ? 'rgba(255,101,0,.1)' : '#fff', color: selected ? ORANGE : '#4a5568',
+      boxShadow: selected ? '0 8px 24px rgba(255,101,0,.18)' : '0 1px 3px rgba(0,0,0,.05)', transition: 'all .15s',
+    }}>
+      {selected && (
+        <span style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: '50%', background: ORANGE, display: 'grid', placeItems: 'center' }}>
+          <Check size={20} color="#fff" />
+        </span>
+      )}
+      <Icon size={48} />
+      <span style={{ fontSize: 22, fontWeight: 700, textAlign: 'center', lineHeight: 1.2 }}>{label}</span>
+    </button>
   );
 }
 const lbl = { display: 'block', fontSize: 20, fontWeight: 700, color: '#4a5568', margin: '0 0 8px' };

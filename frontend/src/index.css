@@ -111,6 +111,13 @@ body {
   background: rgba(255,101,0,.04);
 }
 
+/* ─── Kiosk step transition (Walk-in 3-step flow) ────────────────────────── */
+@keyframes kioskStepIn {
+  from { opacity: 0; transform: translateX(48px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.kiosk-step { animation: kioskStepIn .34s cubic-bezier(.4, 0, .2, 1); }
+
 /* ─── Booking page layout ────────────────────────────────────────────────── */
 /* Form + info sidebar: two columns on desktop, stacked full-width on tablet/
    mobile so the cards always line up (no orphaned narrow sidebar). */
