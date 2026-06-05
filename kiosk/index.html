@@ -441,7 +441,9 @@ function resetIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ if(!$(
 /* ───────── staff exit (5 taps top-left) ───────── */
 let taps=0,tapT=null;
 $('#secret').addEventListener('click',()=>{ taps++; clearTimeout(tapT); tapT=setTimeout(()=>taps=0,1200);
-  if(taps>=5){ taps=0; const pin=prompt('Staff PIN'); if(pin==='1988'){ document.title='MIPOS Kiosk — staff'; alert('Staff mode: use device back/settings to exit kiosk.'); } } });
+  if(taps>=5){ taps=0; const pin=prompt('Staff PIN'); if(!pin) return;
+    if(window.AndroidKiosk && window.AndroidKiosk.exit){ window.AndroidKiosk.exit(pin); }   // native: unlock + exit kiosk
+    else if(pin==='1988'){ alert('Staff mode (browser preview). On the Sunmi K2 this exits the locked app.'); } } });
 
 /* helpers */
 function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
