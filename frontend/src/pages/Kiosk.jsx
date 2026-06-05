@@ -103,6 +103,15 @@ export default function Kiosk() {
     return () => clearTimeout(idleRef.current);
   }, [screen, digits, kick]);
 
+  // Success screen auto-returns home after 9s. Tied to the screen lifecycle so
+  // it's CLEARED when we leave success — prevents a stale timer from the previous
+  // customer firing mid-session and bouncing the next customer back to home.
+  useEffect(() => {
+    if (screen !== 'success') return;
+    const id = setTimeout(reset, 9000);
+    return () => clearTimeout(id);
+  }, [screen, reset]);
+
   /* ── Lookup ── */
   const lookup = async () => {
     setBusy(true); setErr('');
@@ -120,8 +129,7 @@ export default function Kiosk() {
     setBusy(true); setErr('');
     try {
       const res = await axios.post(`${API_URL}/checkin`, { id: match.id });
-      setResult(res.data); setScreen('success');
-      setTimeout(reset, 9000); // linger on success then reset
+      setResult(res.data); setScreen('success'); // auto-return handled by effect
     } catch { setErr('Connection problem. Please tell our staff.'); }
     finally { setBusy(false); }
   };
@@ -134,7 +142,7 @@ export default function Kiosk() {
       {screen === 'confirm'  && <Confirm t={t} lang={lang} appt={match} onBack={reset} onConfirm={doCheckin} onWalk={() => setScreen('walkin')} busy={busy} err={err} />}
       {screen === 'notfound' && <NotFound t={t} onWalk={() => setScreen('walkin')} onRetry={() => { setDigits(''); setScreen('phone'); }} />}
       {screen === 'success'  && <Success t={t} lang={lang} result={result} onDone={reset} />}
-      {screen === 'walkin'   && <WalkIn t={t} lang={lang} prefillPhone={digits} onBack={reset} onDone={(r) => { setResult(r); setScreen('success'); setTimeout(reset, 9000); }} />}
+      {screen === 'walkin'   && <WalkIn t={t} lang={lang} prefillPhone={digits} onBack={reset} onDone={(r) => { setResult(r); setScreen('success'); }} />}
     </div>
   );
 }
@@ -394,16 +402,24 @@ function PrimaryBtn({ disabled, onClick, children }) {
 /* Step 1 — Name */
 function NameStep({ t, value, onChange, onNext, onBack }) {
   const ok = value.trim().length > 0;
+  // Top-aligned (not centered): keeps the input + Next high on screen so the
+  // Android soft keyboard (bottom half) never covers them.
   return (
-    <StepShell t={t} title={t.walkTitle} sub={t.walkSub} onBack={onBack}
-      footer={<PrimaryBtn disabled={!ok} onClick={onNext}>{t.next} <ArrowRight size={28} /></PrimaryBtn>}>
-      <div style={{ width: '100%', maxWidth: 620, margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '0 40px 24px', overflowY: 'auto' }}>
+      <div style={{ textAlign: 'center', paddingTop: 8, marginBottom: 28, flexShrink: 0 }}>
+        <h1 style={{ fontSize: 46, fontWeight: 800, color: '#1a202c', margin: '0 0 10px', letterSpacing: '-.02em' }}>{t.walkTitle}</h1>
+        <p style={{ fontSize: 24, color: '#718096', margin: 0 }}>{t.walkSub}</p>
+      </div>
+      <div style={{ width: '100%', maxWidth: 620, margin: '0 auto', flexShrink: 0 }}>
         <label style={lbl}>{t.name}</label>
         <input autoFocus value={value} onChange={e => onChange(e.target.value)}
+          enterKeyHint="next"
           onKeyDown={e => { if (e.key === 'Enter' && ok) onNext(); }}
-          style={{ ...field, marginBottom: 0, fontSize: 32, padding: '24px 22px' }} />
+          style={{ ...field, marginBottom: 24, fontSize: 30, padding: '22px 22px' }} />
+        <button onClick={onNext} disabled={!ok} style={bigBtn({ maxWidth: 620, opacity: ok ? 1 : .45 })}>{t.next} <ArrowRight size={28} /></button>
+        <button onClick={onBack} style={ghostBtn({ marginTop: 14, minHeight: 64, fontSize: 21, border: 'none' })}><ArrowLeft size={22} /> {t.back}</button>
       </div>
-    </StepShell>
+    </div>
   );
 }
 
