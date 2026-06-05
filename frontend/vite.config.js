@@ -8,4 +8,10 @@ export default defineConfig({
     tailwindcss(),
     react()
   ],
+  build: {
+    // Transpile modern syntax (?. ?? class fields) down so the app runs on the
+    // Sunmi K2's old Android 9 WebView (Chrome ~66-72). Runtime API gaps are
+    // covered by src/polyfills.js. Chrome 64 supports native ES modules.
+    target: ['chrome64', 'es2015'],
+  },
 })
