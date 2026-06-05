@@ -51,6 +51,11 @@ function dayOfWeek(dateStr) {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
+// Today's date (YYYY-MM-DD) in Malaysia time (UTC+8); the Worker clock is UTC.
+function mytToday() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 // "10:00 AM" / "2:30 PM" → 1000 / 1430 (sortable 24h key). null if unparseable.
 function timeToSort(slot) {
   const m = String(slot || '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -536,6 +541,40 @@ export default {
           cs_booked: bmap[s.time]?.cs || 0,
         }));
         return json({ date, day_of_week: dow, slots });
+      }
+
+      // ── Kiosk self check-in (Sunmi K2) ────────────────────────────────────
+      // Narrow, public, kiosk-only endpoints. Match by exact phone + TODAY only;
+      // never expose the broader leads list. (See SECURITY-AUDIT.md.)
+      if (path === '/api/checkin/lookup' && method === 'POST') {
+        const { phone } = await request.json();
+        if (!phone) return json({ error: 'phone required' }, 400);
+        const today = mytToday();
+        const { results } = await env.DB.prepare(
+          `SELECT id,name,phone,date,time_slot,purpose,purposes,needs_pos,needs_cs,attendance
+           FROM leads WHERE date=? AND stage NOT IN ${DEAD_STAGES}`
+        ).bind(today).all();
+        const norm = p => String(p || '').replace(/\D/g, '').replace(/^60/, '').replace(/^0/, '');
+        const want = norm(phone);
+        const appointments = want ? results.filter(l => norm(l.phone) === want) : [];
+        return json({ date: today, appointments });
+      }
+
+      if (path === '/api/checkin' && method === 'POST') {
+        const { id } = await request.json();
+        if (!id) return json({ error: 'id required' }, 400);
+        const lead = await env.DB.prepare('SELECT * FROM leads WHERE id=?').bind(id).first();
+        if (!lead) return json({ error: 'not_found' }, 404);
+        if (lead.attendance !== 'attended') {
+          await env.DB.prepare("UPDATE leads SET attendance='attended' WHERE id=?").bind(id).run();
+        }
+        const team = lead.needs_pos ? 'POS' : 'CS';
+        const teamCol = lead.needs_pos ? 'needs_pos' : 'needs_cs';
+        const row = await env.DB.prepare(
+          `SELECT COUNT(*) AS c FROM leads WHERE date=? AND attendance='attended' AND ${teamCol}=1`
+        ).bind(lead.date).first();
+        const queue_number = `${team}-${String(row.c).padStart(2, '0')}`;
+        return json({ name: lead.name, team, queue_number, time_slot: lead.time_slot, purpose: lead.purpose });
       }
 
       // ── Leads ─────────────────────────────────────────────────────────────
