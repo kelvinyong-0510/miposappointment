@@ -1,0 +1,20 @@
+#!/bin/sh
+##############################################################################
+##  Gradle wrapper script for MIPOS Printer IP Config
+##############################################################################
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+JAVACMD="$JAVA_HOME/bin/java"
+
+GRADLE_APP_HOME=`dirname "$0"`
+GRADLE_APP_HOME=`cd "$GRADLE_APP_HOME" && pwd`
+
+CLASSPATH="$GRADLE_APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+
+exec "$JAVACMD" \
+    -Xmx2048m \
+    -Xms256m \
+    "-Dorg.gradle.appname=gradlew" \
+    -classpath "$CLASSPATH" \
+    org.gradle.wrapper.GradleWrapperMain \
+    "$@"

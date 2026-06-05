@@ -1,0 +1,6 @@
+<resources>
+    <!-- Full-screen, no title bar, dark background matching the kiosk navy. -->
+    <style name="Theme.MiposKiosk" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
