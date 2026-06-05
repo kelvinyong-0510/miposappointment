@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
   Phone, Delete, ArrowRight, ArrowLeft, CheckCircle2, Clock, Users, Tag, Check, X,
+  Calendar, Footprints,
 } from 'lucide-react';
 import { PURPOSES, purposeLabel, teamsForPurposes } from '../purposes';
 import { normalizePhone } from '../phone';
@@ -13,14 +14,17 @@ const IDLE_MS = 45000;
 const T = {
   en: {
     flag: '🇬🇧', label: 'EN',
-    attractTitle: 'Walk right in.', attractSub: 'Tap below to check in for your appointment.',
+    attractTitle: 'Welcome to MIPOS', attractSub: 'How can we help you today?',
+    cardFindTitle: 'Find my booking', cardFindSub: 'I have an appointment',
+    cardWalkTitle: 'Walk-in check-in', cardWalkSub: 'I just arrived',
     checkIn: 'Check In', enterPhone: 'Enter your phone number', findBooking: 'Find My Booking',
     back: 'Back', notFoundTitle: "We couldn't find a booking", notFoundSub: 'No appointment today for that number.',
     walkIn: 'Walk in instead', tryAgain: 'Try again',
     confirmTitle: 'Is this you?', yourAppt: 'Your appointment', team: 'Team', confirmBtn: 'Yes, check me in',
     notMe: 'Not me / Walk in', welcome: 'Welcome', queue: 'Your number', seat: 'Please have a seat — we’ll call you shortly.',
     servedBy: 'You’ll be served by', done: 'Done', posTeam: 'POS Team', csTeam: 'Customer Success',
-    walkTitle: 'Walk-in check-in', name: 'Your name', phoneLabel: 'Phone number',
+    walkTitle: 'Walk-in check-in', walkSub: 'We’ll serve you on the spot.', optional: '(optional)',
+    name: 'Your name', phoneLabel: 'Phone number',
     purpose: 'What can we help with?', pickSlot: 'Pick a time today', noSlots: 'No slots left today — please see our staff.',
     register: 'Register & Check In', booking: 'Booking…', slotFull: 'That time is full — please pick another.',
     needName: 'Please enter your name.', needPhone: 'Please enter your phone number.', needPurpose: 'Please pick at least one.',
@@ -28,14 +32,17 @@ const T = {
   },
   my: {
     flag: '🇲🇾', label: 'MY',
-    attractTitle: 'Selamat datang.', attractSub: 'Tekan di bawah untuk daftar masuk temujanji anda.',
+    attractTitle: 'Selamat datang ke MIPOS', attractSub: 'Bagaimana kami boleh bantu?',
+    cardFindTitle: 'Cari temujanji', cardFindSub: 'Saya ada temujanji',
+    cardWalkTitle: 'Daftar walk-in', cardWalkSub: 'Saya baru tiba',
     checkIn: 'Daftar Masuk', enterPhone: 'Masukkan nombor telefon anda', findBooking: 'Cari Temujanji',
     back: 'Kembali', notFoundTitle: 'Temujanji tidak dijumpai', notFoundSub: 'Tiada temujanji hari ini untuk nombor itu.',
     walkIn: 'Daftar walk-in', tryAgain: 'Cuba lagi',
     confirmTitle: 'Ini anda?', yourAppt: 'Temujanji anda', team: 'Pasukan', confirmBtn: 'Ya, daftar masuk',
     notMe: 'Bukan saya / Walk in', welcome: 'Selamat datang', queue: 'Nombor anda', seat: 'Sila duduk — kami akan panggil anda sebentar lagi.',
     servedBy: 'Anda akan dilayan oleh', done: 'Selesai', posTeam: 'Pasukan POS', csTeam: 'Customer Success',
-    walkTitle: 'Daftar walk-in', name: 'Nama anda', phoneLabel: 'Nombor telefon',
+    walkTitle: 'Daftar walk-in', walkSub: 'Kami akan layan anda terus.', optional: '(pilihan)',
+    name: 'Nama anda', phoneLabel: 'Nombor telefon',
     purpose: 'Apa yang boleh kami bantu?', pickSlot: 'Pilih masa hari ini', noSlots: 'Tiada slot hari ini — sila jumpa staf kami.',
     register: 'Daftar & Masuk', booking: 'Memproses…', slotFull: 'Masa itu penuh — sila pilih yang lain.',
     needName: 'Sila masukkan nama anda.', needPhone: 'Sila masukkan nombor telefon.', needPurpose: 'Sila pilih sekurang-kurangnya satu.',
@@ -43,14 +50,17 @@ const T = {
   },
   zh: {
     flag: '🇨🇳', label: '中文',
-    attractTitle: '欢迎光临', attractSub: '点击下方办理预约登到。',
+    attractTitle: '欢迎光临 MIPOS', attractSub: '请问需要什么协助？',
+    cardFindTitle: '查找我的预约', cardFindSub: '我有预约',
+    cardWalkTitle: '现场登记', cardWalkSub: '我刚到',
     checkIn: '登到', enterPhone: '请输入您的电话号码', findBooking: '查找我的预约',
     back: '返回', notFoundTitle: '找不到预约', notFoundSub: '该号码今天没有预约。',
     walkIn: '改为现场登记', tryAgain: '重试',
     confirmTitle: '是您吗？', yourAppt: '您的预约', team: '团队', confirmBtn: '是的，为我登到',
     notMe: '不是我 / 现场登记', welcome: '欢迎', queue: '您的号码', seat: '请就座，我们很快会叫您。',
     servedBy: '为您服务的团队', done: '完成', posTeam: 'POS 团队', csTeam: '客户成功团队',
-    walkTitle: '现场登记', name: '您的姓名', phoneLabel: '电话号码',
+    walkTitle: '现场登记', walkSub: '我们将立即为您服务。', optional: '（可选）',
+    name: '您的姓名', phoneLabel: '电话号码',
     purpose: '需要什么帮助？', pickSlot: '选择今天的时间', noSlots: '今天没有空位，请联系我们的工作人员。',
     register: '登记并登到', booking: '处理中…', slotFull: '该时间已满，请选择其他时间。',
     needName: '请输入您的姓名。', needPhone: '请输入电话号码。', needPurpose: '请至少选择一项。',
@@ -63,7 +73,7 @@ const ORANGE = '#ff6500';
 
 export default function Kiosk() {
   const [lang, setLang] = useState('en');
-  const [screen, setScreen] = useState('attract'); // attract|phone|confirm|notfound|success|walkin
+  const [screen, setScreen] = useState('home'); // home|phone|confirm|notfound|success|walkin
   const [digits, setDigits] = useState('');
   const [match, setMatch] = useState(null);     // matched appointment
   const [result, setResult] = useState(null);   // checkin result {name,team,queue_number}
@@ -74,14 +84,14 @@ export default function Kiosk() {
   /* Idle auto-reset */
   const idleRef = useRef(null);
   const reset = useCallback(() => {
-    setScreen('attract'); setDigits(''); setMatch(null); setResult(null); setErr(''); setLang('en');
+    setScreen('home'); setDigits(''); setMatch(null); setResult(null); setErr(''); setLang('en');
   }, []);
   const kick = useCallback(() => {
     clearTimeout(idleRef.current);
     idleRef.current = setTimeout(reset, IDLE_MS);
   }, [reset]);
   useEffect(() => {
-    if (screen === 'attract') { clearTimeout(idleRef.current); return; }
+    if (screen === 'home') { clearTimeout(idleRef.current); return; }
     kick();
     return () => clearTimeout(idleRef.current);
   }, [screen, digits, kick]);
@@ -110,9 +120,9 @@ export default function Kiosk() {
   };
 
   return (
-    <div onPointerDown={kick} style={{ position: 'fixed', inset: 0, fontFamily: 'var(--font-sans)', overflow: 'hidden', userSelect: 'none', background: screen === 'attract' ? NAVY : '#f4f6f9' }}>
-      <LangSwitch lang={lang} setLang={setLang} dark={screen === 'attract'} />
-      {screen === 'attract'  && <Attract t={t} onStart={() => setScreen('phone')} />}
+    <div onPointerDown={kick} style={{ position: 'fixed', inset: 0, fontFamily: 'var(--font-sans)', overflow: 'hidden', userSelect: 'none', background: screen === 'home' ? NAVY : '#f4f6f9' }}>
+      <LangSwitch lang={lang} setLang={setLang} dark={screen === 'home'} />
+      {screen === 'home'     && <Home t={t} onFind={() => setScreen('phone')} onWalk={() => setScreen('walkin')} />}
       {screen === 'phone'    && <PhonePad t={t} digits={digits} setDigits={setDigits} onBack={reset} onSubmit={lookup} busy={busy} err={err} />}
       {screen === 'confirm'  && <Confirm t={t} lang={lang} appt={match} onBack={reset} onConfirm={doCheckin} onWalk={() => setScreen('walkin')} busy={busy} err={err} />}
       {screen === 'notfound' && <NotFound t={t} onWalk={() => setScreen('walkin')} onRetry={() => { setDigits(''); setScreen('phone'); }} />}
@@ -154,22 +164,35 @@ const ghostBtn = (extra = {}) => ({
 const shell = { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' };
 const errBox = (msg) => msg ? <p style={{ color: '#dc2626', fontSize: 20, fontWeight: 600, marginTop: 16 }}>{msg}</p> : null;
 
-/* ── Attract ── */
-function Attract({ t, onStart }) {
+/* ── Home (two choices) ── */
+function Home({ t, onFind, onWalk }) {
+  const card = (bg) => ({
+    flex: 1, minHeight: 240, borderRadius: 24, cursor: 'pointer', border: 'none',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+    padding: '28px 20px', fontFamily: 'var(--font-sans)', color: '#fff', textAlign: 'center',
+    background: bg, boxShadow: '0 14px 40px rgba(0,0,0,.35)',
+  });
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: NAVY, overflow: 'hidden' }}>
       {/* Showroom product photo (Sunmi range) — portrait crop keeps the products centered */}
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 38%' }} />
-      {/* Navy gradient: clear products up top, solid base for the headline + CTA */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.15) 30%, rgba(10,22,40,.80) 64%, rgba(10,22,40,.97) 100%)' }} />
-      {/* Content anchored in the lower third */}
-      <div style={{ position: 'relative', textAlign: 'center', maxWidth: 820, margin: '0 auto', padding: '0 40px 12vh' }}>
-        <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 60, marginBottom: 28, borderRadius: 8 }} />
-        <h1 style={{ fontSize: 'clamp(56px,9vw,96px)', fontWeight: 900, color: '#fff', lineHeight: 1.05, letterSpacing: '-.03em', margin: '0 0 18px', textShadow: '0 4px 30px rgba(0,0,0,.5)' }}>{t.attractTitle}</h1>
-        <p style={{ fontSize: 28, color: 'rgba(255,255,255,.82)', margin: '0 0 48px', lineHeight: 1.4 }}>{t.attractSub}</p>
-        <button onClick={onStart} style={bigBtn({ maxWidth: 560, margin: '0 auto', minHeight: 120, fontSize: 34, boxShadow: '0 12px 44px rgba(255,101,0,.5)' })}>
-          {t.checkIn} <ArrowRight size={32} />
-        </button>
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 36%' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.12) 26%, rgba(10,22,40,.78) 58%, rgba(10,22,40,.98) 100%)' }} />
+      <div style={{ position: 'relative', maxWidth: 880, width: '100%', margin: '0 auto', padding: '0 40px 9vh', textAlign: 'center' }}>
+        <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 56, marginBottom: 22, borderRadius: 8 }} />
+        <h1 style={{ fontSize: 'clamp(44px,7vw,72px)', fontWeight: 900, color: '#fff', lineHeight: 1.08, letterSpacing: '-.03em', margin: '0 0 12px', textShadow: '0 4px 30px rgba(0,0,0,.5)' }}>{t.attractTitle}</h1>
+        <p style={{ fontSize: 26, color: 'rgba(255,255,255,.8)', margin: '0 0 40px' }}>{t.attractSub}</p>
+        <div style={{ display: 'flex', gap: 20 }}>
+          <button onClick={onFind} style={card('linear-gradient(135deg,#ff6500,#e05500)')}>
+            <Calendar size={52} />
+            <span style={{ fontSize: 30, fontWeight: 800 }}>{t.cardFindTitle}</span>
+            <span style={{ fontSize: 19, opacity: .9 }}>{t.cardFindSub}</span>
+          </button>
+          <button onClick={onWalk} style={card('rgba(255,255,255,.1)')}>
+            <Footprints size={52} />
+            <span style={{ fontSize: 30, fontWeight: 800 }}>{t.cardWalkTitle}</span>
+            <span style={{ fontSize: 19, opacity: .9 }}>{t.cardWalkSub}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -277,59 +300,40 @@ function Success({ t, lang, result, onDone }) {
   );
 }
 
-/* ── Walk-in ── */
+/* ── Walk-in (no slot — served on the spot) ── */
 function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
   const [form, setForm] = useState({ name: '', phone: prefillPhone ? normalizePhone(prefillPhone) : '', purposes: [] });
-  const [slots, setSlots] = useState([]);
-  const [slot, setSlot] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
-  const needsPos = form.purposes.includes('pos');
-  const needsCs = form.purposes.some(k => k !== 'pos');
-  const slotFull = s => (needsPos && s.pos_booked >= s.pos_capacity) || (needsCs && s.cs_booked >= s.cs_capacity);
   const toggle = key => setForm(f => ({ ...f, purposes: f.purposes.includes(key) ? f.purposes.filter(k => k !== key) : [...f.purposes, key] }));
-
-  useEffect(() => {
-    axios.get(`${API_URL}/availability`, { params: { date: today } }).then(r => setSlots(r.data?.slots || [])).catch(() => setSlots([]));
-  }, [today]);
 
   const submit = async () => {
     if (!form.name.trim()) return setErr(t.needName);
     if (!form.phone.trim()) return setErr(t.needPhone);
-    if (!form.purposes.length) return setErr(t.needPurpose);
-    if (!slot) return setErr(t.needSlot);
     setBusy(true); setErr('');
     try {
-      await axios.post(`${API_URL}/leads`, {
-        name: form.name, phone: form.phone, date: today, time_slot: slot,
-        purposes: form.purposes, purpose: form.purposes.map(k => purposeLabel(k, 'en')).join(', '),
-        source: 'kiosk',
+      const res = await axios.post(`${API_URL}/checkin/walkin`, {
+        name: form.name, phone: form.phone, purposes: form.purposes,
       });
-      // immediately check in the just-created walk-in
-      const look = await axios.post(`${API_URL}/checkin/lookup`, { phone: form.phone });
-      const appt = (look.data?.appointments || []).find(a => a.time_slot === slot) || look.data?.appointments?.[0];
-      if (appt) { const res = await axios.post(`${API_URL}/checkin`, { id: appt.id }); onDone(res.data); }
-      else onDone({ name: form.name, team: needsPos ? 'POS' : 'CS', queue_number: '' });
-    } catch (e) {
-      setErr(e?.response?.status === 409 ? t.slotFull : 'Connection problem. Please tell our staff.');
-      axios.get(`${API_URL}/availability`, { params: { date: today } }).then(r => setSlots(r.data?.slots || [])).catch(() => {});
+      onDone(res.data);
+    } catch {
+      setErr('Connection problem. Please tell our staff.');
     } finally { setBusy(false); }
   };
 
-  const openSlots = slots.filter(s => !slotFull(s));
   return (
-    <div style={{ ...shell, justifyContent: 'flex-start', paddingTop: 96, overflowY: 'auto' }}>
+    <div style={{ ...shell, justifyContent: 'flex-start', paddingTop: 88, overflowY: 'auto' }}>
       <div style={{ width: '100%', maxWidth: 620 }}>
-        <h1 style={{ fontSize: 40, fontWeight: 800, color: '#1a202c', textAlign: 'center', margin: '0 0 28px' }}>{t.walkTitle}</h1>
+        <h1 style={{ fontSize: 40, fontWeight: 800, color: '#1a202c', textAlign: 'center', margin: '0 0 8px' }}>{t.walkTitle}</h1>
+        <p style={{ fontSize: 22, color: '#718096', textAlign: 'center', margin: '0 0 28px' }}>{t.walkSub}</p>
 
         <label style={lbl}>{t.name}</label>
         <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={field} />
         <label style={lbl}>{t.phoneLabel}</label>
         <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} onBlur={e => setForm(f => ({ ...f, phone: normalizePhone(e.target.value) }))} inputMode="tel" style={field} />
 
-        <label style={lbl}>{t.purpose}</label>
+        <label style={lbl}>{t.purpose} <span style={{ fontWeight: 500, color: '#a0aec0' }}>{t.optional}</span></label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
           {PURPOSES.map(p => {
             const on = form.purposes.includes(p.key);
@@ -340,22 +344,8 @@ function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
           })}
         </div>
 
-        <label style={lbl}>{t.pickSlot}</label>
-        {openSlots.length === 0 ? (
-          <p style={{ fontSize: 22, color: '#dc2626', fontWeight: 600 }}>{t.noSlots}</p>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
-            {openSlots.map(s => {
-              const on = slot === s.time;
-              return <button key={s.time} onClick={() => setSlot(s.time)} style={{
-                padding: '16px 22px', borderRadius: 12, cursor: 'pointer', fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-sans)',
-                border: on ? `2px solid ${ORANGE}` : '2px solid #e2e8f0', background: on ? ORANGE : '#fff', color: on ? '#fff' : '#1a202c',
-              }}>{s.time}</button>;
-            })}
-          </div>
-        )}
         {errBox(err)}
-        <button onClick={submit} disabled={busy} style={bigBtn({ marginTop: 20, opacity: busy ? .6 : 1 })}>{busy ? t.booking : <>{t.register} <ArrowRight size={28} /></>}</button>
+        <button onClick={submit} disabled={busy} style={bigBtn({ marginTop: 8, opacity: busy ? .6 : 1 })}>{busy ? t.booking : <>{t.register} <ArrowRight size={28} /></>}</button>
         <button onClick={onBack} style={ghostBtn({ marginTop: 14, minHeight: 64, fontSize: 20, marginBottom: 40 })}><ArrowLeft size={22} /> {t.back}</button>
       </div>
     </div>
