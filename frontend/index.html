@@ -12,8 +12,22 @@
     <script>
       (function () {
         function send(p) { try { fetch('https://mipos-api.miporean.workers.dev/api/kiosk/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }); } catch (e) {} }
-        window.addEventListener('error', function (e) { send({ event: 'jserror', ua: 'jserror', msg: String((e && e.message) || e), src: String((e && e.filename) || ''), line: (e && e.lineno) || 0 }); });
-        window.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; send({ event: 'jsreject', ua: 'jsreject', msg: String((r && r.message) || r || '') }); });
+        // 1) Unconditional boot ping — proves page JS runs AND web→server fetch works
+        send({ event: 'webboot', ua: navigator.userAgent });
+        // 2) capture=true so resource-load errors (failed script/css) are caught too
+        window.addEventListener('error', function (e) {
+          if (e && e.target && (e.target.src || e.target.href)) { send({ event: 'resourceerror', ua: 'resourceerror', res: String(e.target.src || e.target.href) }); }
+          else { send({ event: 'jserror', ua: 'jserror', msg: String((e && e.message) || e), src: String((e && e.filename) || ''), line: (e && e.lineno) || 0 }); }
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; send({ event: 'jsreject', ua: 'jsreject', msg: String((r && r.stack) || (r && r.message) || r || '') }); });
+        // 3) React / SystemJS report failures via console.error — capture those too
+        var oe = console.error;
+        console.error = function () { try { send({ event: 'console', ua: 'console', msg: Array.prototype.map.call(arguments, function (a) { return (a && a.stack) || String(a); }).join(' ').slice(0, 900) }); } catch (x) {} return oe.apply(console, arguments); };
+        // 4) After a few seconds, report whether React actually mounted into #root
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          send({ event: 'rootcheck', ua: 'rootcheck', childCount: root ? root.children.length : -1, hasSystem: (typeof window.System !== 'undefined'), bodyLen: (document.body && document.body.innerHTML.length) || 0 });
+        }, 5000);
       })();
     </script>
   </head>

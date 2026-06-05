@@ -127,7 +127,7 @@ export default function Kiosk() {
   };
 
   return (
-    <div onPointerDown={kick} style={{ position: 'fixed', inset: 0, fontFamily: 'var(--font-sans)', overflow: 'hidden', userSelect: 'none', background: screen === 'home' ? NAVY : '#f4f6f9' }}>
+    <div onPointerDown={kick} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, fontFamily: 'var(--font-sans)', overflow: 'hidden', userSelect: 'none', background: screen === 'home' ? NAVY : '#f4f6f9' }}>
       <LangSwitch lang={lang} setLang={setLang} dark={screen === 'home'} />
       {screen === 'home'     && <Home t={t} onFind={() => setScreen('phone')} onWalk={() => setScreen('walkin')} />}
       {screen === 'phone'    && <PhonePad t={t} digits={digits} setDigits={setDigits} onBack={reset} onSubmit={lookup} busy={busy} err={err} />}
@@ -168,7 +168,7 @@ const ghostBtn = (extra = {}) => ({
   background: 'transparent', border: '2px solid #cbd5e0', color: '#4a5568', fontSize: 22, fontWeight: 600,
   fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, ...extra,
 });
-const shell = { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' };
+const shell = { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' };
 const errBox = (msg) => msg ? <p style={{ color: '#dc2626', fontSize: 20, fontWeight: 600, marginTop: 16 }}>{msg}</p> : null;
 
 /* ── Home (two choices) ── */
@@ -180,13 +180,13 @@ function Home({ t, onFind, onWalk }) {
     background: bg, boxShadow: '0 14px 40px rgba(0,0,0,.35)',
   });
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: NAVY, overflow: 'hidden' }}>
+    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: NAVY, overflow: 'hidden' }}>
       {/* Showroom product photo (Sunmi range) — portrait crop keeps the products centered */}
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 36%' }} />
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.12) 26%, rgba(10,22,40,.78) 58%, rgba(10,22,40,.98) 100%)' }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 36%' }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.12) 26%, rgba(10,22,40,.78) 58%, rgba(10,22,40,.98) 100%)' }} />
       <div style={{ position: 'relative', maxWidth: 880, width: '100%', margin: '0 auto', padding: '0 40px 9vh', textAlign: 'center' }}>
         <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 56, marginBottom: 22, borderRadius: 8 }} />
-        <h1 style={{ fontSize: 'clamp(44px,7vw,72px)', fontWeight: 900, color: '#fff', lineHeight: 1.08, letterSpacing: '-.03em', margin: '0 0 12px', textShadow: '0 4px 30px rgba(0,0,0,.5)' }}>{t.attractTitle}</h1>
+        <h1 style={{ fontSize: 60, fontWeight: 900, color: '#fff', lineHeight: 1.08, letterSpacing: '-.03em', margin: '0 0 12px', textShadow: '0 4px 30px rgba(0,0,0,.5)' }}>{t.attractTitle}</h1>
         <p style={{ fontSize: 26, color: 'rgba(255,255,255,.8)', margin: '0 0 40px' }}>{t.attractSub}</p>
         <div style={{ display: 'flex', gap: 20 }}>
           <button onClick={onFind} style={card('linear-gradient(135deg,#ff6500,#e05500)')}>
@@ -339,7 +339,7 @@ function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
   const toggle = key => setForm(f => ({ ...f, purposes: f.purposes.includes(key) ? f.purposes.filter(k => k !== key) : [...f.purposes, key] }));
 
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column' }}>
       <StepProgress step={step} total={3} />
       <div key={step} className="kiosk-step" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {step === 1 && (
