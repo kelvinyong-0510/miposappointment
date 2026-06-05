@@ -14,7 +14,12 @@ export default defineConfig({
     // the fast module bundle. Covers the white-screen on old kiosks.
     legacy({
       targets: ['chrome >= 51', 'safari >= 10'],
-      modernPolyfills: true,
+      // renderModernChunks:false → emit ONLY the fully-transpiled + core-js
+      // legacy (SystemJS) bundle, loaded by EVERY browser. The Sunmi K2's
+      // Chrome-66 WebView supports ES modules, so it was running the modern
+      // bundle and ignoring the legacy fallback → blank. This makes it run the
+      // robust bundle too. Negligible cost for a kiosk; guarantees it works.
+      renderModernChunks: false,
     }),
   ],
   build: {

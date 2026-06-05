@@ -7,6 +7,15 @@
     <meta name="description" content="MIPOS ShopTech Centre — Book a walk-in appointment at our POS & technology showroom in Cheras, Kuala Lumpur." />
     <meta name="theme-color" content="#f97316" />
     <title>MIPOS ShopTech Centre — Book an Appointment</title>
+    <!-- ES5 error catcher (runs on any engine): reports uncaught JS errors so we
+         can diagnose old-WebView blank screens remotely. Safe to keep. -->
+    <script>
+      (function () {
+        function send(p) { try { fetch('https://mipos-api.miporean.workers.dev/api/kiosk/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }); } catch (e) {} }
+        window.addEventListener('error', function (e) { send({ event: 'jserror', ua: 'jserror', msg: String((e && e.message) || e), src: String((e && e.filename) || ''), line: (e && e.lineno) || 0 }); });
+        window.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; send({ event: 'jsreject', ua: 'jsreject', msg: String((r && r.message) || r || '') }); });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
