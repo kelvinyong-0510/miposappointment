@@ -2,11 +2,46 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
   Phone, Delete, ArrowRight, ArrowLeft, CheckCircle2, Clock, Users, Tag, Check, X,
-  Calendar, Footprints,
+  Calendar, Footprints, Volume2, VolumeX,
   Monitor, Cpu, Wrench, Tv, BellRing, Ticket, PhoneCall, LayoutGrid,
 } from 'lucide-react';
 import { PURPOSES, purposeLabel, teamsForPurposes } from '../purposes';
 import { normalizePhone } from '../phone';
+import { speak, stopSpeak } from '../speech';
+
+// Spoken guidance per screen/step (Malay 'my' read with the id-ID voice).
+const VOICE = {
+  en: {
+    home: 'Welcome to MIPOS! If you have an appointment, tap Find my booking. If you just arrived, tap Walk-in check-in.',
+    phone: 'Please enter your phone number, then tap Find my booking.',
+    confirm: 'We found your booking. Please check the details, then tap Confirm check-in.',
+    notfound: 'Sorry, we could not find your booking. You can tap Walk-in check-in instead.',
+    walkName: 'Please enter your name, then tap Next.',
+    walkPhone: 'Please enter your phone number, then tap Next.',
+    walkServices: 'Please choose what we can help you with, then tap Register and check in.',
+    success: 'Thank you {name}. Your number is {queue}. Please have a seat, we will call you shortly.',
+  },
+  my: {
+    home: 'Selamat datang ke MIPOS! Jika anda ada temujanji, tekan Cari tempahan saya. Jika anda baru tiba, tekan Daftar masuk.',
+    phone: 'Sila masukkan nombor telefon anda, kemudian tekan Cari tempahan saya.',
+    confirm: 'Kami menjumpai tempahan anda. Sila semak butiran, kemudian tekan Sahkan daftar masuk.',
+    notfound: 'Maaf, kami tidak menjumpai tempahan anda. Anda boleh tekan Daftar masuk.',
+    walkName: 'Sila masukkan nama anda, kemudian tekan Seterusnya.',
+    walkPhone: 'Sila masukkan nombor telefon anda, kemudian tekan Seterusnya.',
+    walkServices: 'Sila pilih perkhidmatan yang anda perlukan, kemudian tekan Daftar dan daftar masuk.',
+    success: 'Terima kasih {name}. Nombor anda ialah {queue}. Sila duduk, kami akan memanggil anda sebentar lagi.',
+  },
+  zh: {
+    home: '欢迎光临 MIPOS！如果您有预约，请点击查找我的预约。如果您是临时到访，请点击现场登记。',
+    phone: '请输入您的电话号码，然后点击查找我的预约。',
+    confirm: '我们找到了您的预约。请核对信息，然后点击确认登记。',
+    notfound: '抱歉，未能找到您的预约。您可以点击现场登记。',
+    walkName: '请输入您的姓名，然后点击下一步。',
+    walkPhone: '请输入您的电话号码，然后点击下一步。',
+    walkServices: '请选择您需要的服务，然后点击登记并签到。',
+    success: '谢谢您 {name}。您的号码是 {queue}。请稍坐，我们很快会叫您。',
+  },
+};
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 const IDLE_MS = 45000;
@@ -86,7 +121,22 @@ export default function Kiosk() {
   const [result, setResult] = useState(null);   // checkin result {name,team,queue_number}
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem('kioskMuted') === '1'; } catch (e) { return false; } });
   const t = T[lang];
+
+  /* Voice guidance (text-to-speech) */
+  const say = useCallback((key, vars) => {
+    if (muted) return;
+    let txt = (VOICE[lang] && VOICE[lang][key]) || '';
+    if (vars) Object.keys(vars).forEach(k => { txt = txt.split('{' + k + '}').join(vars[k]); });
+    if (txt) speak(txt, lang);
+  }, [muted, lang]);
+  const toggleMute = () => setMuted(m => {
+    const n = !m;
+    try { localStorage.setItem('kioskMuted', n ? '1' : '0'); } catch (e) {}
+    if (n) stopSpeak();
+    return n;
+  });
 
   /* Idle auto-reset */
   const idleRef = useRef(null);
@@ -111,6 +161,18 @@ export default function Kiosk() {
     const id = setTimeout(reset, 9000);
     return () => clearTimeout(id);
   }, [screen, reset]);
+
+  // Speak the guidance for the current top-level screen (walk-in steps speak
+  // themselves). Re-fires on language change so switching language re-announces.
+  useEffect(() => {
+    if (muted) { stopSpeak(); return; }
+    if (screen === 'home') say('home');
+    else if (screen === 'phone') say('phone');
+    else if (screen === 'confirm') say('confirm');
+    else if (screen === 'notfound') say('notfound');
+    else if (screen === 'success') say('success', { name: result?.name || '', queue: result?.queue_number || '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, lang, muted]);
 
   /* ── Lookup ── */
   const lookup = async () => {
@@ -137,17 +199,32 @@ export default function Kiosk() {
   return (
     <div onPointerDown={kick} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, fontFamily: 'var(--font-sans)', overflow: 'hidden', userSelect: 'none', background: screen === 'home' ? NAVY : '#f4f6f9' }}>
       <LangSwitch lang={lang} setLang={setLang} dark={screen === 'home'} />
+      <SpeakToggle muted={muted} onToggle={toggleMute} dark={screen === 'home'} />
       {screen === 'home'     && <Home t={t} onFind={() => setScreen('phone')} onWalk={() => setScreen('walkin')} />}
       {screen === 'phone'    && <PhonePad t={t} digits={digits} setDigits={setDigits} onBack={reset} onSubmit={lookup} busy={busy} err={err} />}
       {screen === 'confirm'  && <Confirm t={t} lang={lang} appt={match} onBack={reset} onConfirm={doCheckin} onWalk={() => setScreen('walkin')} busy={busy} err={err} />}
       {screen === 'notfound' && <NotFound t={t} onWalk={() => setScreen('walkin')} onRetry={() => { setDigits(''); setScreen('phone'); }} />}
       {screen === 'success'  && <Success t={t} lang={lang} result={result} onDone={reset} />}
-      {screen === 'walkin'   && <WalkIn t={t} lang={lang} prefillPhone={digits} onBack={reset} onDone={(r) => { setResult(r); setScreen('success'); }} />}
+      {screen === 'walkin'   && <WalkIn t={t} lang={lang} say={say} prefillPhone={digits} onBack={reset} onDone={(r) => { setResult(r); setScreen('success'); }} />}
     </div>
   );
 }
 
 /* ── Shared bits ─────────────────────────────────────────────────────────── */
+function SpeakToggle({ muted, onToggle, dark }) {
+  return (
+    <button onClick={onToggle} aria-label="toggle voice guidance" style={{
+      position: 'absolute', bottom: 24, left: 24, zIndex: 10,
+      width: 60, height: 60, borderRadius: 99, cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: `2px solid ${dark ? 'rgba(255,255,255,.25)' : '#e2e8f0'}`,
+      background: dark ? 'rgba(255,255,255,.08)' : '#fff', color: muted ? '#94a3b8' : ORANGE,
+    }}>
+      {muted ? <VolumeX size={28} /> : <Volume2 size={28} />}
+    </button>
+  );
+}
+
 function LangSwitch({ lang, setLang, dark }) {
   return (
     <div style={{ position: 'absolute', top: 28, right: 28, display: 'flex', gap: 8, zIndex: 10 }}>
@@ -322,11 +399,18 @@ const SERVICE_ICONS = {
   pager: BellRing, queue: Ticket, calling: PhoneCall, others: LayoutGrid,
 };
 
-function WalkIn({ t, lang, prefillPhone, onBack, onDone }) {
+function WalkIn({ t, lang, say, prefillPhone, onBack, onDone }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ name: '', phone: prefillPhone ? prefillPhone.replace(/\D/g, '') : '', purposes: [] });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  // Speak the guidance for the current step (re-announces on language change).
+  useEffect(() => {
+    if (!say) return;
+    say(step === 1 ? 'walkName' : step === 2 ? 'walkPhone' : 'walkServices');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, lang]);
 
   const submit = async () => {
     setBusy(true); setErr('');

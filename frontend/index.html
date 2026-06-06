@@ -28,6 +28,18 @@
           var root = document.getElementById('root');
           send({ event: 'rootcheck', ua: 'rootcheck', childCount: root ? root.children.length : -1, hasSystem: (typeof window.System !== 'undefined'), bodyLen: (document.body && document.body.innerHTML.length) || 0 });
         }, 5000);
+        // 5) Speech feasibility probe: can this WebView speak, and what voices exist?
+        function speechProbe(tag) {
+          var ss = ('speechSynthesis' in window), voices = [];
+          try { voices = ss ? window.speechSynthesis.getVoices() : []; } catch (e) {}
+          send({ event: 'speechprobe', ua: 'speechprobe', when: tag,
+            speechSynthesis: ss,
+            speechRecognition: ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window),
+            voiceCount: voices.length,
+            langs: voices.map(function (v) { return v.lang; }).slice(0, 25).join(',') });
+        }
+        try { if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = function () { speechProbe('voiceschanged'); }; } catch (e) {}
+        setTimeout(function () { speechProbe('t4000'); }, 4000);
       })();
     </script>
   </head>
