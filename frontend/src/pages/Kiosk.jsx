@@ -190,7 +190,7 @@ function Home({ t, onFind, onWalk }) {
   return (
     <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: NAVY, overflow: 'hidden' }}>
       {/* Showroom product photo (Sunmi range) — portrait crop keeps the products centered */}
-      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundImage: 'url(/kiosk-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center 36%' }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundImage: 'url(/kiosk-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center 36%' }} />
       <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, background: 'linear-gradient(180deg, rgba(10,22,40,.35) 0%, rgba(10,22,40,.12) 26%, rgba(10,22,40,.78) 58%, rgba(10,22,40,.98) 100%)' }} />
       <div style={{ position: 'relative', maxWidth: 880, width: '100%', margin: '0 auto', padding: '0 40px 9vh', textAlign: 'center' }}>
         <img src="/mipos-logo.png" alt="MIPOS" style={{ height: 56, marginBottom: 22, borderRadius: 8 }} />
